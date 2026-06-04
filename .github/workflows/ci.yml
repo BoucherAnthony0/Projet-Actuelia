@@ -1,0 +1,16 @@
+name: CI S1
+on: [push, pull_request]
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dépendances minimales
+        run: pip install python-dotenv
+      - name: Compilation
+        run: python -m compileall config.py app.py ingest_cv.py db core tests
+      - name: Test base de données
+        run: python tests/test_db.py

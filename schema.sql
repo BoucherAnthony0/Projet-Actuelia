@@ -22,17 +22,27 @@ CREATE TABLE IF NOT EXISTS app_meta (
 INSERT OR IGNORE INTO app_meta (cle, valeur) VALUES ('schema_version', '1');
 
 -- -------------------------------------------------------------
---  CLIENTS  (logo + charte récupérés pour la page de garde)
+--  CLIENTS  —  DIMENSION ACCUMULÉE AUTOMATIQUEMENT (optionnelle)
+--  Ce N'EST PAS un référentiel maître saisi à la main.
+--  Le nom et le logo du client sont extraits de chaque appel
+--  d'offres (voir table 'demandes'). Cette table est remplie/
+--  enrichie tout seul par l'outil au fil des AO traités (upsert) :
+--    - 1ère fois qu'on voit un client  -> création
+--    - fois suivantes                  -> on réutilise / enrichit
+--  Intérêt : réutiliser un logo déjà nettoyé, accumuler des notes,
+--  et relier les propales d'un même client (missions similaires).
+--  Si on ignore cette table, l'app fonctionne avec les champs
+--  portés directement par la demande.
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clients (
-    id                  INTEGER PRIMARY KEY,
-    nom                 TEXT NOT NULL UNIQUE,
-    secteur             TEXT,
-    logo_path           TEXT,             -- chemin local du logo
-    couleur_primaire    TEXT,             -- ex. "#2E4763"
-    couleur_secondaire  TEXT,
-    notes               TEXT,             -- infos spécifiques éventuelles
-    created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    id              INTEGER PRIMARY KEY,
+    nom             TEXT NOT NULL UNIQUE,
+    secteur         TEXT,
+    logo_path       TEXT,             -- logo canonique réutilisable (issu d'un AO précédent)
+    notes           TEXT,             -- informations spécifiques accumulées au fil des AO
+    nb_demandes     INTEGER NOT NULL DEFAULT 0,
+    premiere_vue    TEXT NOT NULL DEFAULT (datetime('now')),
+    derniere_vue    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- -------------------------------------------------------------
@@ -83,9 +93,13 @@ CREATE TABLE IF NOT EXISTS consultant_competences (
 );
 
 -- -------------------------------------------------------------
---  GRILLES TARIFAIRES
+--  GRILLES TARIFAIRES  (donnée interne — votre tarification)
 --  client_id NULL = grille générique ; sinon grille propre au client.
---  Permet : régie/forfait, tarif par profil, tarif par client.
+--  Permet : régie/forfait, tarif par grade, tarif par client.
+--  RÔLE : sert de RÉFÉRENCE affichée dans l'interface pour guider.
+--  Le tarif réellement facturé est saisi / confirmé À LA MAIN sur
+--  chaque ligne (cf. demande_consultants.tjm_applique) : ça évite
+--  les erreurs et autorise les remises négociées par client.
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS grilles_tarifaires (
     id                  INTEGER PRIMARY KEY,
@@ -103,31 +117,42 @@ CREATE TABLE IF NOT EXISTS grilles_tarifaires (
 --  DEMANDES  (l'appel d'offres déposé + son analyse)
 --  analyse_json = sortie structurée du LLM
 --  (contexte, objectifs, enjeux, livrables, planning, compétences)
---  tjm_unique = cas d'un TJM négocié unique, quel que soit le profil
+--  La facturation se calcule depuis les LIGNES (demande_consultants).
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS demandes (
     id                  INTEGER PRIMARY KEY,
     titre               TEXT,
     reference           TEXT,             -- ex. "RFX008792"
-    client_id           INTEGER,
+    client_nom          TEXT,             -- nom du client EXTRAIT de l'AO
+    client_logo_path    TEXT,             -- logo EXTRAIT de cet AO (source de vérité page de garde)
+    client_id           INTEGER,          -- lien OPTIONNEL vers la dimension clients (résolu par nom)
     statut              TEXT NOT NULL DEFAULT 'brouillon'
                         CHECK (statut IN ('brouillon','analyse','en_cours',
                                           'generee','envoyee','gagnee','perdue')),
     texte_brut          TEXT,             -- contenu parsé de la demande
     analyse_json        TEXT,             -- analyse structurée (LLM)
     mode_facturation    TEXT CHECK (mode_facturation IN ('regie','forfait')),
-    nb_jours            REAL,
-    tjm_unique          REAL,             -- NULL si on utilise la grille
+    nb_jours            REAL,             -- indicatif (issu de l'AO) ; total réel = somme des lignes
     date_depot          TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 );
 
 -- Consultants retenus pour une demande (sélection MANUELLE).
--- Table de liaison N-N ; "ordre" gère l'ordre des slides CV.
+-- = LIGNES de la proposition financière : un grade, un nombre de
+--   jours et un tarif PAR collaborateur. Plusieurs grades / volumes
+--   différents sur une même mission sont donc gérés nativement.
+-- tjm_reference = tarif suggéré par la grille (indicatif, lecture seule)
+-- tjm_applique  = tarif RÉELLEMENT facturé, saisi/confirmé à la main
+--                 (permet remises client, ou TJM unique négocié)
+-- Total d'une ligne = nb_jours * tjm_applique ; total mission = somme.
 CREATE TABLE IF NOT EXISTS demande_consultants (
     demande_id      INTEGER NOT NULL,
     consultant_id   INTEGER NOT NULL,
     role_sur_mission TEXT,
+    grade           TEXT,                 -- grade retenu pour la facturation (souvent = séniorité)
+    nb_jours        REAL NOT NULL DEFAULT 0,
+    tjm_reference   REAL,                 -- pré-rempli depuis la grille (indicatif)
+    tjm_applique    REAL,                 -- tarif facturé, SAISI À LA MAIN
     ordre           INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (demande_id, consultant_id),
     FOREIGN KEY (demande_id)    REFERENCES demandes(id)    ON DELETE CASCADE,

@@ -1,5 +1,8 @@
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-pydantic-settings==2.6.1
-pytest==8.3.4
-httpx==0.28.1
+streamlit>=1.40
+pymupdf>=1.24
+python-docx>=1.1
+pdfplumber>=0.11
+python-dotenv>=1.0
+openai>=1.50
+# Pour passer sur Claude après validation, décommenter :
+# anthropic>=0.40
