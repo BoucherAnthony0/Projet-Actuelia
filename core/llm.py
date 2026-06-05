@@ -1,8 +1,3 @@
-"""Couche LLM commutable. Tout le couplage au fournisseur est ici.
-  LLM_PROVIDER=openai_compat  -> Gemini / Groq / Mistral… (gratuit, SDK openai)
-  LLM_PROVIDER=anthropic      -> Claude (SDK anthropic)
-Passer de l'un à l'autre = changer le .env, aucun autre fichier ne bouge.
-"""
 import json
 import config
 
@@ -10,7 +5,6 @@ _client = None
 
 
 def _get_client():
-    """Retourne (kind, client) où kind ∈ {'anthropic','openai'}."""
     global _client
     if _client is None:
         if config.LLM_PROVIDER == "anthropic":

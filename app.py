@@ -1,4 +1,3 @@
-"""Application S1 — objectif unique : importer des CV, les structurer, les lister."""
 import streamlit as st
 import config
 from db import init_db, get_connection, repository
@@ -22,21 +21,24 @@ c1.metric("LLM", "configuré" if config.llm_configure() else "non config", fourn
 c2.metric("Consultants en base", repository.count_consultants(con))
 
 if not config.llm_configure():
-    st.info(" clé du LLM dans `.env` (voir README) pour activer l'extraction.")
+    st.info("Renseignez la clé du LLM dans `.env` (voir README) pour activer l'extraction.")
 
 st.divider()
 st.subheader("Importer des CV (PDF / Word)")
 files = st.file_uploader("Déposer un ou plusieurs CV", type=["pdf", "docx", "doc"],
                          accept_multiple_files=True)
-if st.button("Importer", disabled=not (files and config.llm_configure())):
-    for f in files:
-        dest = config.CV_DIR / f.name
-        dest.write_bytes(f.getbuffer())
-        try:
-            cid = cv_import.importer_cv(con, dest)
-            st.success(f"Importé : {f.name} (consultant id {cid})")
-        except Exception as e:
-            st.error(f"{f.name} : {e}")
+if st.button("Importer", disabled=not config.llm_configure()):
+    if not files:
+        st.warning("Déposez d'abord un ou plusieurs CV avant d'importer.")
+    else:
+        for f in files:
+            dest = config.CV_DIR / f.name
+            dest.write_bytes(f.getbuffer())
+            try:
+                cid = cv_import.importer_cv(con, dest)
+                st.success(f"Importé : {f.name} (consultant id {cid})")
+            except Exception as e:
+                st.error(f"{f.name} : {e}")
 
 st.divider()
 st.subheader("Consultants en base")
