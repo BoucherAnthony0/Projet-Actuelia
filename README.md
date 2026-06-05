@@ -3,7 +3,7 @@
 Premier incrément d'un outil interne qui générera, à terme, des propositions
 commerciales PowerPoint à partir d'un appel d'offres.
 
-## 🎯 Objectif unique de la Semaine 1
+## Objectif unique de la Semaine 1
 
 **Importer des CV, les structurer automatiquement (LLM), et les afficher.**
 Rien d'autre. Pas d'analyse de demande, pas de génération, pas de PowerPoint :
@@ -44,9 +44,9 @@ python ingest_cv.py --cv "C:\chemin\local\CV"
 ```
 
 ## Périmètre — à NE PAS faire cette semaine
-- ❌ écrans « demande / budget / contenu / export »
-- ❌ RAG des anciennes propositions (chromadb, embeddings)
-- ❌ génération PowerPoint
+- écrans « demande / budget / contenu / export »
+- RAG des anciennes propositions (chromadb, embeddings)
+- génération PowerPoint
 On garde le projet **épuré** ; on empile semaine par semaine.
 
 ## Structure

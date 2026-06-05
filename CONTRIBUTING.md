@@ -25,7 +25,7 @@ Puis ouvrir une **Pull Request** (ou Merge Request) vers `main` et la laisser
 en revue. La CI GitHub vérifie automatiquement la compilation et le test.
 
 ## Convention de messages de commit
-- `feat:` nouvelle fonctionnalité
+- `feat:`  
 - `fix:` correction de bug
 - `docs:` documentation
 - `refactor:` réorganisation sans changement de comportement

@@ -15,14 +15,14 @@ def _bootstrap():
 _bootstrap()
 con = get_connection()
 
-st.title("📇 Import & structuration des CV — Semaine 1")
+st.title("Import & structuration des CV — Semaine 1")
 fournisseur = "Claude" if config.LLM_PROVIDER == "anthropic" else f"gratuit ({config.LLM_MODEL})"
 c1, c2 = st.columns(2)
-c1.metric("LLM", "configuré" if config.llm_configure() else "non configuré", fournisseur)
+c1.metric("LLM", "configuré" if config.llm_configure() else "non config", fournisseur)
 c2.metric("Consultants en base", repository.count_consultants(con))
 
 if not config.llm_configure():
-    st.info("Renseignez la clé du LLM dans `.env` (voir README) pour activer l'extraction.")
+    st.info(" clé du LLM dans `.env` (voir README) pour activer l'extraction.")
 
 st.divider()
 st.subheader("Importer des CV (PDF / Word)")
