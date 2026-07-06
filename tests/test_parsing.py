@@ -32,3 +32,25 @@ def test_parse_txt_file(tmp_path: Path) -> None:
     txt.write_text("Texte libre du RFX008792", encoding="utf-8")
 
     assert parse_file(txt) == "Texte libre du RFX008792"
+
+
+def test_parse_docx_includes_table_content(tmp_path: Path) -> None:
+    import docx
+
+    document = docx.Document()
+    document.add_paragraph("Introduction RFX008792")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Livrable"
+    table.cell(0, 1).text = "Échéance"
+    table.cell(1, 0).text = "Audit initial"
+    table.cell(1, 1).text = "S+2"
+    path = tmp_path / "rfx008792.docx"
+    document.save(path)
+
+    texte = parse_file(path)
+
+    assert "Introduction RFX008792" in texte
+    assert "Livrable" in texte
+    assert "Échéance" in texte
+    assert "Audit initial" in texte
+    assert "S+2" in texte
