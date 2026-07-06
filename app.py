@@ -1,11 +1,8 @@
 import streamlit as st
 import json
-import importlib
 import config
 from db import init_db, get_connection, repository
 from core import cv_import, parsing
-
-parsing = importlib.reload(parsing)
 
 st.set_page_config(page_title="Actuelia — Import CV (S1)", page_icon="📇", layout="wide")
 
