@@ -105,6 +105,14 @@ def set_analyse(
     con.commit()
 
 
+def set_contenu_genere(con, demande_id: int, contenu_genere: dict) -> None:
+    con.execute(
+        "UPDATE demandes SET contenu_genere_json=? WHERE id=?",
+        (_to_json_string(contenu_genere), demande_id),
+    )
+    con.commit()
+
+
 def add_demande(con, **kw) -> int:
     return create_demande(con, **kw)
 
@@ -159,7 +167,8 @@ def _touch_client_demande_count(con, client_id: int) -> None:
     )
 
 
-_LIGNE_COLS = ("role_sur_mission", "grade", "nb_jours", "tjm_reference", "tjm_applique", "ordre")
+_LIGNE_COLS = ("role_sur_mission", "grade", "nb_jours", "tjm_reference", "tjm_applique",
+               "synthese_cv", "ordre")
 _LIGNE_DEFAULTS = {"nb_jours": 0, "ordre": 0}
 
 

@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS demandes (
                                           'generee','envoyee','gagnee','perdue')),
     texte_brut          TEXT,             -- contenu parsé de la demande
     analyse_json        TEXT,             -- analyse structurée (LLM)
+    contenu_genere_json TEXT,             -- rédaction (LLM) : contexte + démarche, éditable
     mode_facturation    TEXT CHECK (mode_facturation IN ('regie','forfait')),
     nb_jours            REAL,             -- indicatif (issu de l'AO) ; total réel = somme des lignes
     date_depot          TEXT NOT NULL DEFAULT (datetime('now')),
@@ -153,6 +154,7 @@ CREATE TABLE IF NOT EXISTS demande_consultants (
     nb_jours        REAL NOT NULL DEFAULT 0,
     tjm_reference   REAL,                 -- pré-rempli depuis la grille (indicatif)
     tjm_applique    REAL,                 -- tarif facturé, SAISI À LA MAIN
+    synthese_cv     TEXT,                 -- synthèse CV (LLM) ciblée mission, éditable, zéro invention
     ordre           INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (demande_id, consultant_id),
     FOREIGN KEY (demande_id)    REFERENCES demandes(id)    ON DELETE CASCADE,
