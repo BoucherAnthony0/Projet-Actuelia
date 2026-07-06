@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import config
 from db import init_db, get_connection, repository
-from core import cv_import, parsing
+from core import analyse, cv_import, parsing
 
 st.set_page_config(page_title="Actuelia — Import CV (S1)", page_icon="📇", layout="wide")
 
@@ -86,6 +86,19 @@ if st.button("Analyser"):
 draft = st.session_state.get("request_draft")
 if draft:
     st.caption("Fiche de demande éditable avant enregistrement")
+
+    if st.button("Lancer l'analyse approfondie (LLM)", disabled=not config.llm_configure()):
+        try:
+            enrichie = analyse.analyser_demande(draft.get("texte_brut", ""))
+            st.session_state.request_draft = {
+                **draft,
+                "analyse_json": {**(draft.get("analyse_json") or {}), **enrichie},
+            }
+            draft = st.session_state.request_draft
+            st.success("Analyse enrichie par le LLM (contexte, objectifs, enjeux, compétences, planning).")
+        except Exception as e:
+            st.error(f"Analyse LLM impossible : {e}")
+
     with st.form("request_validation_form", clear_on_submit=False):
         c1, c2 = st.columns(2)
         reference = c1.text_input("Référence", value=draft.get("reference", ""))
@@ -114,19 +127,51 @@ if draft:
             value=draft.get("texte_brut", ""),
             height=260,
         )
-        analyse = draft.get("analyse_json", {}) or {}
+        analyse_json_actuel = draft.get("analyse_json", {}) or {}
+        contexte_text = st.text_area(
+            "Contexte / compréhension du besoin",
+            value=analyse_json_actuel.get("contexte", ""),
+            height=150,
+        )
+        objectifs_text = st.text_area(
+            "Objectifs (une ligne par objectif)",
+            value="\n".join(analyse_json_actuel.get("objectifs", [])),
+            height=120,
+        )
+        enjeux_text = st.text_area(
+            "Enjeux (une ligne par enjeu)",
+            value="\n".join(analyse_json_actuel.get("enjeux", [])),
+            height=120,
+        )
         livrables_text = st.text_area(
             "Livrables (une ligne par livrable)",
-            value="\n".join(analyse.get("livrables", [])),
-            height=200,
+            value="\n".join(analyse_json_actuel.get("livrables", [])),
+            height=150,
+        )
+        competences_text = st.text_area(
+            "Compétences requises (une ligne par compétence)",
+            value="\n".join(analyse_json_actuel.get("competences", [])),
+            height=120,
+        )
+        planning_text = st.text_area(
+            "Planning / jalons",
+            value=analyse_json_actuel.get("planning", ""),
+            height=100,
         )
         submitted = st.form_submit_button("Valider et enregistrer")
 
     if submitted:
-        livrables = [line.strip() for line in livrables_text.splitlines() if line.strip()]
+        def _lignes(texte: str) -> list[str]:
+            return [line.strip() for line in texte.splitlines() if line.strip()]
+
         analyse_json = {
-            **analyse,
-            "livrables": livrables,
+            **analyse_json_actuel,
+            "contexte": contexte_text.strip(),
+            "objectifs": _lignes(objectifs_text),
+            "enjeux": _lignes(enjeux_text),
+            "livrables": _lignes(livrables_text),
+            "competences": _lignes(competences_text),
+            "planning": planning_text.strip(),
             "source": draft.get("source_name", ""),
         }
         payload = {
