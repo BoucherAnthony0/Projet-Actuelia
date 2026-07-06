@@ -27,6 +27,20 @@ en fin de projet).
 - génération PowerPoint (Semaine 4)
 - RAG des anciennes propositions / chromadb / embeddings (Semaine 5)
 
+### Piste future — déploiement réseau interne
+Idée à instruire plus tard : héberger l'app sur le PC de la société qui tourne
+H24/7j, avec les consultants qui y accèdent via une adresse mise en favori
+(plutôt qu'un lancement manuel par poste).
+- Techniquement, Streamlit le permet nativement : `streamlit run app.py
+  --server.address 0.0.0.0 --server.port 8501`, accessible depuis le réseau
+  local à `http://<ip-du-pc>:8501`.
+- Prérequis côté infra (hors dépôt) : IP fixe réservée pour ce PC sur le
+  routeur, et le processus enregistré comme service qui redémarre seul
+  (NSSM ou tâche planifiée au démarrage sous Windows).
+- Point à trancher avant de le faire : aucune authentification aujourd'hui —
+  toute personne sur le réseau de l'entreprise ayant l'adresse peut voir et
+  modifier CV, budgets et propositions.
+
 ## Installation (Windows / PowerShell)
 
 Lancer les commandes **une par une** (PowerShell n'accepte pas `&&`) :
