@@ -209,6 +209,42 @@ def list_lignes(con, demande_id: int) -> list:
     ).fetchall()
 
 
+def tjm_reference(con, mode: str, profil_seniorite: str, client_id: int | None = None) -> float | None:
+    """Tarif de référence : priorité à la grille spécifique au client, sinon grille générique."""
+    if client_id is not None:
+        row = con.execute(
+            "SELECT tjm FROM grilles_tarifaires "
+            "WHERE mode=? AND profil_seniorite=? AND client_id=? AND actif=1 "
+            "ORDER BY date_validite DESC LIMIT 1",
+            (mode, profil_seniorite, client_id),
+        ).fetchone()
+        if row:
+            return row["tjm"]
+    row = con.execute(
+        "SELECT tjm FROM grilles_tarifaires "
+        "WHERE mode=? AND profil_seniorite=? AND client_id IS NULL AND actif=1 "
+        "ORDER BY date_validite DESC LIMIT 1",
+        (mode, profil_seniorite),
+    ).fetchone()
+    return row["tjm"] if row else None
+
+
+def list_grille(con, mode: str, client_id: int | None = None) -> list:
+    """Grille tarifaire affichée en référence : générique + spécifique au client si présente."""
+    if client_id is not None:
+        return con.execute(
+            "SELECT * FROM grilles_tarifaires WHERE mode=? AND actif=1 "
+            "AND (client_id IS NULL OR client_id=?) "
+            "ORDER BY (client_id IS NULL), profil_seniorite",
+            (mode, client_id),
+        ).fetchall()
+    return con.execute(
+        "SELECT * FROM grilles_tarifaires WHERE mode=? AND client_id IS NULL AND actif=1 "
+        "ORDER BY profil_seniorite",
+        (mode,),
+    ).fetchall()
+
+
 def _to_json_string(value) -> str | None:
     if value is None:
         return None
