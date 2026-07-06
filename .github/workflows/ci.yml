@@ -1,4 +1,4 @@
-name: CI S1
+name: CI S3
 on: [push, pull_request]
 jobs:
   verifier:
@@ -8,9 +8,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Dépendances minimales
-        run: pip install python-dotenv
+      - name: Dépendances
+        run: pip install -r requirements.txt
       - name: Compilation
-        run: python -m compileall config.py app.py ingest_cv.py db core tests
-      - name: Test base de données
+        run: python -m compileall config.py app.py ingest_cv.py db core tests pages
+      - name: Suite de tests
+        run: pytest -q
+      - name: Test base de données (historique)
         run: python tests/test_db.py

@@ -1,17 +1,31 @@
-# Actuelia — Génération de propositions · **Semaine 1**
+# Actuelia — Génération de propositions · **Semaine 3**
 
-Premier incrément d'un outil interne qui générera, à terme, des propositions
-commerciales PowerPoint à partir d'un appel d'offres.
+Outil interne qui génère le contenu d'une proposition commerciale en réponse à
+un appel d'offres. Le calcul financier est **100% déterministe** (jamais
+confié au LLM) ; la couche LLM est **commutable** (gratuit maintenant, Claude
+en fin de projet).
 
-## Objectif unique de la Semaine 1
+## Ce qui est livré (S1 → S3)
 
-**Importer des CV, les structurer automatiquement (LLM), et les afficher.**
-Rien d'autre. Pas d'analyse de demande, pas de génération, pas de PowerPoint :
-ces briques arrivent aux semaines suivantes.
+- **S1 — Import CV** : import de CV (PDF/Word), structuration automatique par
+  LLM, liste des consultants.
+- **S2 — Dépôt & analyse de la demande** : import d'un appel d'offres
+  (PDF/Word/texte/email), extraction rapide (référence, titre, client,
+  livrables), puis analyse LLM enrichie (contexte, objectifs, enjeux,
+  compétences, planning), éditable et persistée.
+- **S3 — Proposition** :
+  - sélection manuelle des consultants retenus pour une demande + mode de
+    facturation (régie/forfait) et client ;
+  - tableau financier par lignes (grade, jours, tarif), total 100%
+    déterministe, avec une grille tarifaire de référence ;
+  - rédaction LLM du contexte et de la démarche d'intervention (cadrage /
+    analyse / réalisation / accompagnement / restitution), éditable ;
+  - synthèse CV par consultant retenu, ciblée sur le besoin, sans invention
+    (strictement bornée au CV réel importé).
 
-### Critère de réussite
-Je lance l'app, j'importe des CV réels, je les vois listés avec leur séniorité
-et leurs années d'expérience correctement extraites.
+### Hors périmètre pour l'instant
+- génération PowerPoint (Semaine 4)
+- RAG des anciennes propositions / chromadb / embeddings (Semaine 5)
 
 ## Installation (Windows / PowerShell)
 
@@ -35,30 +49,47 @@ Puis ouvrir `.env` et coller une clé LLM **gratuite** :
 streamlit run app.py
 ```
 
-La base `data/actuelia.db` se crée toute seule au 1er lancement.
+La base `data/actuelia.db` se crée toute seule au 1er lancement (les
+migrations de schéma s'appliquent automatiquement aux bases déjà existantes).
 
-### Import en masse (optionnel)
+### Écrans
+- **Accueil** (`app.py`) : import de CV, dépôt et analyse d'une demande.
+- **Consultants & Budget** (`pages/1_Consultants_Budget.py`) : demande active,
+  mode de facturation / client, sélection des consultants, tableau financier.
+- **Contenu généré** (`pages/2_Contenu_Genere.py`) : contexte rédigé, démarche
+  d'intervention, synthèse CV par consultant retenu — tout est éditable.
+
+### Grille tarifaire de démonstration (optionnel)
+```powershell
+python -m db.seed
+```
+Insère quelques TJM de référence par grade (mode régie), utilisés pour
+pré-remplir le tarif de référence dans le tableau financier.
+
+### Import en masse de CV (optionnel)
 Copier d'abord le dossier des CV en local (ne pas pointer le réseau Z:), puis :
 ```powershell
 python ingest_cv.py --cv "C:\chemin\local\CV"
 ```
 
-## Périmètre — à NE PAS faire cette semaine
-- écrans « demande / budget / contenu / export »
-- RAG des anciennes propositions (chromadb, embeddings)
-- génération PowerPoint
-On garde le projet **épuré** ; on empile semaine par semaine.
+## Tests
+
+```powershell
+pytest -q
+python tests/test_db.py
+```
 
 ## Structure
 ```
-app.py            Écran unique : import + liste des CV
-config.py         Config (chemins + LLM commutable gratuit/Claude)
-schema.sql        Schéma complet de la base (S1 n'utilise que 'consultants')
-db/               Connexion + CRUD consultants
-core/             parsing (PDF/Word) · llm (commutable) · cv_import
-ingest_cv.py      Import en masse depuis un dossier local
-tests/test_db.py  Test sans LLM (base + CRUD)
-.github/          CI : vérifie chaque push
+app.py                     Accueil : import CV + dépôt/analyse de demande
+pages/                     Écrans multipage Streamlit (Consultants & Budget, Contenu généré)
+config.py                  Config (chemins + LLM commutable gratuit/Claude)
+schema.sql                 Schéma complet de la base
+db/                        Connexion + migrations + CRUD + seed grille tarifaire
+core/                      parsing · analyse · redaction · finance · llm · cv_import
+ingest_cv.py               Import en masse depuis un dossier local
+tests/                     Suite pytest (LLM mocké, pas de dépendance réseau en CI)
+.github/                   CI : compilation + pytest à chaque push
 ```
 
 ## LLM : gratuit maintenant, Claude plus tard
