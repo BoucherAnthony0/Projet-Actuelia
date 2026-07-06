@@ -159,6 +159,56 @@ def _touch_client_demande_count(con, client_id: int) -> None:
     )
 
 
+_LIGNE_COLS = ("role_sur_mission", "grade", "nb_jours", "tjm_reference", "tjm_applique", "ordre")
+_LIGNE_DEFAULTS = {"nb_jours": 0, "ordre": 0}
+
+
+def set_ligne(con, demande_id: int, consultant_id: int, **champs) -> None:
+    """Upsert d'une ligne de la proposition financière (un consultant retenu sur une demande)."""
+    existing = con.execute(
+        "SELECT 1 FROM demande_consultants WHERE demande_id=? AND consultant_id=?",
+        (demande_id, consultant_id),
+    ).fetchone()
+    if existing:
+        sets = [f"{col}=?" for col in _LIGNE_COLS if col in champs]
+        vals = [champs[col] for col in _LIGNE_COLS if col in champs]
+        if sets:
+            vals += [demande_id, consultant_id]
+            con.execute(
+                f"UPDATE demande_consultants SET {', '.join(sets)} "
+                "WHERE demande_id=? AND consultant_id=?",
+                vals,
+            )
+    else:
+        data = {**_LIGNE_DEFAULTS, **champs}
+        cols = ("demande_id", "consultant_id") + _LIGNE_COLS
+        vals = [demande_id, consultant_id] + [data.get(col) for col in _LIGNE_COLS]
+        con.execute(
+            f"INSERT INTO demande_consultants({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
+            vals,
+        )
+    con.commit()
+
+
+def remove_ligne(con, demande_id: int, consultant_id: int) -> None:
+    con.execute(
+        "DELETE FROM demande_consultants WHERE demande_id=? AND consultant_id=?",
+        (demande_id, consultant_id),
+    )
+    con.commit()
+
+
+def list_lignes(con, demande_id: int) -> list:
+    return con.execute(
+        "SELECT dc.*, c.nom, c.prenom, c.titre, c.seniorite "
+        "FROM demande_consultants dc "
+        "JOIN consultants c ON c.id = dc.consultant_id "
+        "WHERE dc.demande_id=? "
+        "ORDER BY dc.ordre, c.nom, c.prenom",
+        (demande_id,),
+    ).fetchall()
+
+
 def _to_json_string(value) -> str | None:
     if value is None:
         return None
