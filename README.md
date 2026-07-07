@@ -67,11 +67,12 @@ La base `data/actuelia.db` se crée toute seule au 1er lancement (les
 migrations de schéma s'appliquent automatiquement aux bases déjà existantes).
 
 ### Écrans
-- **Accueil** (`app.py`) : import de CV, dépôt et analyse d'une demande.
-- **Consultants & Budget** (`pages/1_Consultants_Budget.py`) : demande active,
-  mode de facturation / client, sélection des consultants, tableau financier.
-- **Contenu généré** (`pages/2_Contenu_Genere.py`) : contexte rédigé, démarche
-  d'intervention, synthèse CV par consultant retenu — tout est éditable.
+Une seule page (`app.py`), organisée en onglets :
+- **Accueil** : import de CV, dépôt et analyse d'une demande.
+- **Consultants & Budget** : demande active, mode de facturation / client,
+  sélection des consultants, tableau financier.
+- **Contenu généré** : contexte rédigé, démarche d'intervention, synthèse CV
+  par consultant retenu — tout est éditable.
 
 ### Grille tarifaire de démonstration (optionnel)
 ```powershell
@@ -95,8 +96,7 @@ python tests/test_db.py
 
 ## Structure
 ```
-app.py                     Accueil : import CV + dépôt/analyse de demande
-pages/                     Écrans multipage Streamlit (Consultants & Budget, Contenu généré)
+app.py                     Page unique à onglets : Accueil, Consultants & Budget, Contenu généré
 config.py                  Config (chemins + LLM commutable gratuit/Claude)
 schema.sql                 Schéma complet de la base
 db/                        Connexion + migrations + CRUD + seed grille tarifaire
