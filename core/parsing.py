@@ -64,7 +64,12 @@ def _pdf(path: Path) -> str:
 
 def _docx(path: Path) -> str:
     import docx
-    return "\n".join(p.text for p in docx.Document(path).paragraphs)
+    document = docx.Document(path)
+    texte = [p.text for p in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            texte.append("\t".join(cell.text.strip() for cell in row.cells))
+    return "\n".join(texte)
 
 
 def _eml(path: Path) -> str:

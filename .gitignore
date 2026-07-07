@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .env
 data/actuelia.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
 data/uploads/*
 data/cv/*
 !data/**/.gitkeep
