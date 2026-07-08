@@ -12,13 +12,11 @@ from db import get_connection, init_db, repository
 def test_rediger_contenu_structure_et_editable() -> None:
     fake = {
         "contexte_redige": "Le client souhaite fiabiliser son SI actuariel.",
-        "demarche": {
-            "cadrage": "Cadrage des besoins avec les parties prenantes.",
-            "analyse": "Analyse de l'existant et des risques.",
-            "realisation": "Mise en œuvre des livrables.",
-            "accompagnement": "Accompagnement au changement.",
-            "restitution": "Restitution finale et transfert de compétences.",
-        },
+        "demarche_cadrage": "Cadrage des besoins avec les parties prenantes.",
+        "demarche_analyse": "Analyse de l'existant et des risques.",
+        "demarche_realisation": "Mise en œuvre des livrables.",
+        "demarche_accompagnement": "Accompagnement au changement.",
+        "demarche_restitution": "Restitution finale et transfert de compétences.",
     }
     with patch("core.redaction.llm.complete_json", return_value=fake) as mock_complete:
         resultat = redaction.rediger_contenu({"contexte": "...", "objectifs": ["Fiabiliser"]})
@@ -27,7 +25,7 @@ def test_rediger_contenu_structure_et_editable() -> None:
     assert resultat["contexte_redige"] == fake["contexte_redige"]
     assert set(resultat["demarche"].keys()) == set(redaction.PHASES_DEMARCHE)
     for phase in redaction.PHASES_DEMARCHE:
-        assert resultat["demarche"][phase] == fake["demarche"][phase]
+        assert resultat["demarche"][phase] == fake[f"demarche_{phase}"]
 
 
 def test_rediger_contenu_gere_demarche_partielle() -> None:
