@@ -78,13 +78,49 @@ with tab_accueil:
     st.divider()
     st.subheader("Consultants en base")
     rows = repository.list_consultants(con)
-    if rows:
-        st.dataframe([{"id": r["id"], "nom": r["nom"], "prénom": r["prenom"],
-                       "titre": r["titre"], "séniorité": r["seniorite"],
-                       "années d'XP": r["annees_experience"]} for r in rows],
-                     use_container_width=True)
-    else:
+    if not rows:
         st.caption("Aucun consultant importé pour l'instant.")
+    else:
+        grades_grille = sorted({
+            row["profil_seniorite"]
+            for mode in ("regie", "forfait")
+            for row in repository.list_grille(con, mode)
+            if row["profil_seniorite"] and "Non Actuariat" not in row["profil_seniorite"]
+        })
+        if not grades_grille:
+            st.dataframe([{"id": r["id"], "nom": r["nom"], "prénom": r["prenom"],
+                           "titre": r["titre"], "séniorité": r["seniorite"],
+                           "années d'XP": r["annees_experience"]} for r in rows],
+                         use_container_width=True)
+            st.caption(
+                "Chargez une grille tarifaire (`python -m db.seed`) pour pouvoir assigner "
+                "un grade normalisé à chaque consultant."
+            )
+        else:
+            table_data = [{
+                "id": r["id"], "nom": r["nom"], "prénom": r["prenom"], "titre": r["titre"],
+                "grade": r["seniorite"] if r["seniorite"] in grades_grille else None,
+                "années d'XP": r["annees_experience"],
+            } for r in rows]
+            edited = st.data_editor(
+                table_data,
+                column_config={
+                    "id": st.column_config.NumberColumn(disabled=True),
+                    "nom": st.column_config.TextColumn(disabled=True),
+                    "prénom": st.column_config.TextColumn(disabled=True),
+                    "titre": st.column_config.TextColumn(disabled=True),
+                    "grade": st.column_config.SelectboxColumn("Grade", options=grades_grille),
+                    "années d'XP": st.column_config.NumberColumn(disabled=True),
+                },
+                hide_index=True, use_container_width=True, key="consultants_grade_editor",
+            )
+            if st.button("Enregistrer les grades"):
+                maj = 0
+                for original, edite in zip(table_data, edited):
+                    if edite["grade"] and edite["grade"] != original["grade"]:
+                        repository.set_seniorite(con, original["id"], edite["grade"])
+                        maj += 1
+                st.success(f"{maj} grade(s) mis à jour." if maj else "Aucun changement à enregistrer.")
 
     st.divider()
     st.subheader("Parsing des demandes")
