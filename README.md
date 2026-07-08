@@ -74,12 +74,26 @@ Une seule page (`app.py`), organisée en onglets :
 - **Contenu généré** : contexte rédigé, démarche d'intervention, synthèse CV
   par consultant retenu — tout est éditable.
 
-### Grille tarifaire de démonstration (optionnel)
+### Grille tarifaire (optionnel)
 ```powershell
 python -m db.seed
 ```
-Insère quelques TJM de référence par grade (mode régie), utilisés pour
-pré-remplir le tarif de référence dans le tableau financier.
+Insère les TJM de référence par grade, utilisés pour pré-remplir le tarif de
+référence dans le tableau financier.
+
+- Si `data/grille_tarifaire.json` existe, le seed charge **cette grille**
+  (la vraie grille Actuelia, forfait/régie × actuariat/non actuariat). Ce
+  fichier est **volontairement exclu de Git** (`.gitignore`) car les tarifs
+  sont confidentiels — à copier manuellement sur chaque poste, jamais à
+  committer. Format attendu :
+  ```json
+  {
+    "forfait": {"Associé": {"actuariat": 2360, "non_actuariat": 1888}, "...": {}},
+    "regie":   {"Associé": {"actuariat": 1910, "non_actuariat": 1528}, "...": {}}
+  }
+  ```
+- Sinon, il retombe sur une grille de démonstration (valeurs fictives, mode
+  régie uniquement) — suffisant pour un dépôt fraîchement cloné ou la CI.
 
 ### Import en masse de CV (optionnel)
 Copier d'abord le dossier des CV en local (ne pas pointer le réseau Z:), puis :

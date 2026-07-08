@@ -29,14 +29,21 @@ tab_accueil, tab_budget, tab_contenu = st.tabs(["Accueil", "Consultants & Budget
 
 
 def _demande_selector(demandes: list, key: str) -> int:
-    labels = {
-        f"{d['reference'] or '(sans réf.)'} — {d['titre'] or ''} ({d['client_nom'] or 'client ?'})": d["id"]
+    # Le libellé inclut toujours l'id : deux demandes peuvent avoir la même
+    # référence/titre/client (ex. titre vide), ce qui collapserait des clés
+    # de dict identiques et désynchroniserait l'index du selectbox.
+    options = [
+        f"{d['reference'] or '(sans réf.)'} — {d['titre'] or ''} ({d['client_nom'] or 'client ?'}) · #{d['id']}"
         for d in demandes
-    }
-    default_id = st.session_state.get("demande_active_id", demandes[0]["id"])
-    default_index = next((i for i, d in enumerate(demandes) if d["id"] == default_id), 0)
-    choice = st.selectbox("Demande active", list(labels.keys()), index=default_index, key=key)
-    demande_id = labels[choice]
+    ]
+    ids = [d["id"] for d in demandes]
+    default_id = st.session_state.get("demande_active_id", ids[0])
+    default_index = ids.index(default_id) if default_id in ids else 0
+    choice_index = st.selectbox(
+        "Demande active", range(len(options)), index=default_index, key=key,
+        format_func=lambda i: options[i],
+    )
+    demande_id = ids[choice_index]
     st.session_state["demande_active_id"] = demande_id
     return demande_id
 
