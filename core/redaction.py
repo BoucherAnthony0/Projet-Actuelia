@@ -11,12 +11,17 @@ PHASES_DEMARCHE = ("cadrage", "analyse", "realisation", "accompagnement", "resti
 SYSTEM_REDACTION = (
     "Tu es un consultant senior qui rédige le contenu d'une proposition commerciale "
     "en réponse à un appel d'offres. À partir de l'analyse fournie (contexte, objectifs, "
-    "enjeux, livrables, compétences, planning), rédige un JSON structuré : "
-    '{"contexte_redige": str, "demarche": {"cadrage": str, "analyse": str, '
-    '"realisation": str, "accompagnement": str, "restitution": str}}. '
+    "enjeux, livrables, compétences, planning), rédige un JSON structuré avec EXACTEMENT "
+    "ces 6 clés, toutes à la racine du JSON (aucune imbrication) : "
+    '{"contexte_redige": str, "demarche_cadrage": str, "demarche_analyse": str, '
+    '"demarche_realisation": str, "demarche_accompagnement": str, "demarche_restitution": str}. '
     "contexte_redige : paragraphe de compréhension du besoin, professionnel et concis. "
-    "demarche : une phrase ou un court paragraphe par phase, décrivant concrètement "
-    "les actions menées. N'invente pas d'information absente de l'analyse fournie."
+    "demarche_cadrage / demarche_analyse / demarche_realisation / demarche_accompagnement / "
+    "demarche_restitution : pour CHACUNE de ces 5 phases, un paragraphe concret décrivant "
+    "les actions menées sur cette mission. "
+    "IMPÉRATIF : les 6 clés doivent TOUTES contenir du texte non vide, même générique si "
+    "l'analyse fournie est succincte — ne laisse jamais une clé vide ou absente. "
+    "N'invente pas d'information absente de l'analyse fournie."
 )
 
 SYSTEM_SYNTHESE_CV = (
@@ -33,10 +38,9 @@ SYSTEM_SYNTHESE_CV = (
 def rediger_contenu(analyse_json: dict) -> dict:
     user = json.dumps(analyse_json or {}, ensure_ascii=False)
     resultat = llm.complete_json(SYSTEM_REDACTION, user)
-    demarche_brute = resultat.get("demarche") or {}
     return {
         "contexte_redige": resultat.get("contexte_redige") or "",
-        "demarche": {phase: demarche_brute.get(phase, "") for phase in PHASES_DEMARCHE},
+        "demarche": {phase: resultat.get(f"demarche_{phase}") or "" for phase in PHASES_DEMARCHE},
     }
 
 
