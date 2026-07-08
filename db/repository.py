@@ -29,6 +29,12 @@ def count_consultants(con) -> int:
     return con.execute("SELECT COUNT(*) FROM consultants WHERE actif=1").fetchone()[0]
 
 
+def set_seniorite(con, consultant_id: int, seniorite: str) -> None:
+    """Grade normalisé du consultant (aligné sur les libellés de la grille tarifaire)."""
+    con.execute("UPDATE consultants SET seniorite=? WHERE id=?", (seniorite, consultant_id))
+    con.commit()
+
+
 def get_or_create_client(
     con,
     nom: str,
