@@ -1,4 +1,4 @@
-# Actuelia — Génération de propositions · **Semaine 3**
+# Actuelia — Génération de propositions · **Semaine 4 (en cours)**
 
 Outil interne qui génère le contenu d'une proposition commerciale en réponse à
 un appel d'offres. Le calcul financier est **100% déterministe** (jamais
@@ -23,8 +23,13 @@ en fin de projet).
   - synthèse CV par consultant retenu, ciblée sur le besoin, sans invention
     (strictement bornée au CV réel importé).
 
+- **S4 — Export PowerPoint** *(en cours)* : génération d'une proposition
+  `.pptx` fidèle au template de marque Actuelia (page de garde, présentation
+  du cabinet, budget), à partir des données déjà saisies. Phase 1 livrée :
+  couverture, sommaire, présentation du cabinet, budget par ligne, slide de
+  fin. À venir : slides contexte/démarche, fiches CV par consultant.
+
 ### Hors périmètre pour l'instant
-- génération PowerPoint (Semaine 4)
 - RAG des anciennes propositions / chromadb / embeddings (Semaine 5)
 
 ### Piste future — déploiement réseau interne
@@ -95,6 +100,13 @@ référence dans le tableau financier.
 - Sinon, il retombe sur une grille de démonstration (valeurs fictives, mode
   régie uniquement) — suffisant pour un dépôt fraîchement cloné ou la CI.
 
+### Export PowerPoint (optionnel)
+Pose le template de marque Actuelia dans `data/template_proposition.pptx`.
+Comme la grille tarifaire, ce fichier est **volontairement exclu de Git**
+(contenu de marque + exemples de missions clientes réelles) — à copier
+manuellement sur chaque poste, jamais à committer. Sans lui, le bouton
+« Générer le PowerPoint » (onglet Contenu généré) reste indisponible.
+
 ### Import en masse de CV (optionnel)
 Copier d'abord le dossier des CV en local (ne pas pointer le réseau Z:), puis :
 ```powershell
@@ -114,7 +126,7 @@ app.py                     Page unique à onglets : Accueil, Consultants & Budge
 config.py                  Config (chemins + LLM commutable gratuit/Claude)
 schema.sql                 Schéma complet de la base
 db/                        Connexion + migrations + CRUD + seed grille tarifaire
-core/                      parsing · analyse · redaction · finance · llm · cv_import
+core/                      parsing · analyse · redaction · finance · pptx_export · llm · cv_import
 ingest_cv.py               Import en masse depuis un dossier local
 tests/                     Suite pytest (LLM mocké, pas de dépendance réseau en CI)
 .github/                   CI : compilation + pytest à chaque push

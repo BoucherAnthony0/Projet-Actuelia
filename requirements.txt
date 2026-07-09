@@ -5,6 +5,7 @@ pdfplumber>=0.11
 python-dotenv>=1.0
 openai>=1.50
 extract-msg>=0.48
+python-pptx>=1.0
 # Pour passer sur Claude après validation, décommenter :
 # anthropic>=0.40
 

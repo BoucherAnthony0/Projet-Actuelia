@@ -1,8 +1,9 @@
 import json
+from pathlib import Path
 import streamlit as st
 import config
 from db import init_db, get_connection, repository
-from core import analyse, cv_import, finance, parsing, redaction
+from core import analyse, cv_import, finance, parsing, pptx_export, redaction
 
 st.set_page_config(page_title="Actuelia", page_icon="📇", layout="wide")
 
@@ -489,3 +490,36 @@ with tab_contenu:
                     repository.set_ligne(con, demande_id, cid, synthese_cv=synthese_texte)
                     st.success("Synthèse enregistrée.")
                 st.divider()
+
+        st.divider()
+        st.subheader("Export PowerPoint")
+
+        if not pptx_export.template_disponible():
+            st.caption(
+                "Template PowerPoint introuvable (`data/template_proposition.pptx`). "
+                "Fichier local volontairement hors Git — voir le README."
+            )
+        elif st.button("Générer le PowerPoint"):
+            lignes_budget = repository.list_lignes(con, demande_id)
+            nom_fichier = f"{(demande['reference'] or f'demande-{demande_id}').replace(' ', '_')}.pptx"
+            chemin_sortie = config.PROPOSITIONS_DIR / nom_fichier
+            try:
+                total = pptx_export.generer_pptx(demande=demande, lignes=lignes_budget, chemin_sortie=chemin_sortie)
+                repository.create_proposition(
+                    con, demande_id=demande_id, client_id=demande["client_id"],
+                    titre=demande["titre"], chemin_pptx=str(chemin_sortie),
+                )
+                st.session_state["pptx_genere"] = str(chemin_sortie)
+                st.success(f"PowerPoint généré (budget total : {total:,.0f} €).".replace(",", " "))
+            except Exception as e:
+                st.error(f"Génération impossible : {e}")
+
+        chemin_genere = st.session_state.get("pptx_genere")
+        if chemin_genere and Path(chemin_genere).exists():
+            with open(chemin_genere, "rb") as f:
+                st.download_button(
+                    "Télécharger le PowerPoint",
+                    data=f.read(),
+                    file_name=Path(chemin_genere).name,
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
