@@ -9,4 +9,6 @@ data/*.db-journal
 data/uploads/*
 data/cv/*
 data/grille_tarifaire.json
+data/template_proposition.pptx
+data/propositions_generees/
 !data/**/.gitkeep

@@ -260,6 +260,24 @@ def list_grille(con, mode: str, client_id: int | None = None) -> list:
     ).fetchall()
 
 
+def create_proposition(con, *, demande_id: int, client_id: int | None, titre: str | None,
+                        secteur: str | None = None, chemin_pptx: str) -> int:
+    cur = con.execute(
+        "INSERT INTO propositions(demande_id, client_id, titre, secteur, chemin_pptx, origine) "
+        "VALUES(?,?,?,?,?,'generee')",
+        (demande_id, client_id, titre, secteur, chemin_pptx),
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def list_propositions(con, demande_id: int) -> list:
+    return con.execute(
+        "SELECT * FROM propositions WHERE demande_id=? ORDER BY date_generation DESC",
+        (demande_id,),
+    ).fetchall()
+
+
 def _to_json_string(value) -> str | None:
     if value is None:
         return None

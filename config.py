@@ -10,6 +10,8 @@ DB_PATH     = DATA_DIR / "actuelia.db"
 SCHEMA_PATH = BASE_DIR / "schema.sql"
 UPLOADS_DIR = DATA_DIR / "uploads"
 CV_DIR      = DATA_DIR / "cv"
+PROPOSITIONS_DIR   = DATA_DIR / "propositions_generees"
+TEMPLATE_PPTX_PATH = DATA_DIR / "template_proposition.pptx"
 
 LLM_PROVIDER   = os.getenv("LLM_PROVIDER", "openai_compat")
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
@@ -26,5 +28,5 @@ def llm_configure() -> bool:
     return bool(ANTHROPIC_API_KEY) if LLM_PROVIDER == "anthropic" else bool(LLM_API_KEY)
 
 
-for _d in (DATA_DIR, UPLOADS_DIR, CV_DIR):
+for _d in (DATA_DIR, UPLOADS_DIR, CV_DIR, PROPOSITIONS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
