@@ -12,11 +12,13 @@ Cela préserve fidèlement la charte graphique. Le calcul financier reste
 forme du texte et des chiffres déjà calculés, jamais de calcul lui-même.
 """
 import copy
+import json
 from datetime import date
+from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.util import Pt
+from pptx.util import Emu, Pt
 
 import config
 from . import finance
@@ -31,9 +33,15 @@ _IDX_INTERCALAIRE_CABINET = 2
 _IDX_CABINET_DEBUT = 3
 _IDX_CABINET_FIN = 8  # inclus
 _IDX_SLIDE_TEXTE = 10  # slide texte "propre" : titre + sous-titre + corps
+_IDX_CV = 24  # slide CV la plus complète (photo, formation, expériences, compétences)
 _IDX_INTERCALAIRE_COMMERCIAL = 29
 _IDX_BUDGET = 30
 _IDX_FIN = 31
+
+# Sur la slide CV du template, les pictos à droite de cette limite sont les
+# logos des clients du consultant de l'exemple : sans équivalent en base,
+# ils sont retirés pour ne pas attribuer ces références à un autre profil.
+_CV_LIMITE_LOGOS = Emu(8686800)  # ~9,5 pouces
 
 _COULEUR_ENTETE = RGBColor(0x44, 0x54, 0x6A)  # dk2 du thème Actuelia
 
@@ -80,11 +88,49 @@ def _dupliquer_slide(prs: Presentation, index_source: int):
     return dest
 
 
-def _forme(slide, nom: str):
-    for shape in slide.shapes:
+def _formes(conteneur):
+    """Itère récursivement toutes les formes, y compris à l'intérieur des groupes."""
+    for shape in conteneur.shapes:
+        yield shape
+        if shape.shape_type == 6:  # GROUP
+            yield from _formes(shape)
+
+
+def _forme(slide, nom: str, *, recursif: bool = False):
+    for shape in (_formes(slide) if recursif else slide.shapes):
         if shape.name == nom:
             return shape
     return None
+
+
+def _remplacer_texte(text_frame, lignes: list[str] | str) -> None:
+    """Remplace le texte en conservant la mise en forme du 1er run existant.
+
+    Assigner .text directement effacerait la mise en forme locale (couleur,
+    gras, taille) des zones de texte libres et des cellules de tableau.
+    """
+    if isinstance(lignes, str):
+        lignes = lignes.split("\n")
+    lignes = lignes or [""]
+
+    for para in list(text_frame.paragraphs[1:]):
+        para._p.getparent().remove(para._p)
+
+    def _ecrire(paragraphe, texte: str) -> None:
+        if paragraphe.runs:
+            paragraphe.runs[0].text = texte
+            for run in paragraphe.runs[1:]:
+                run._r.getparent().remove(run._r)
+        else:
+            paragraphe.text = texte
+
+    premier = text_frame.paragraphs[0]
+    _ecrire(premier, lignes[0])
+
+    corps = premier._p.getparent()
+    for ligne in lignes[1:]:
+        corps.append(copy.deepcopy(premier._p))
+        _ecrire(text_frame.paragraphs[-1], ligne)
 
 
 def _supprimer_forme(slide, nom: str) -> None:
@@ -168,6 +214,86 @@ def _section_demarche(prs: Presentation, contenu: dict) -> None:
     for numero, (phase, label) in enumerate(phases, start=1):
         _slide_texte(prs, "Démarche d'intervention",
                      f"Phase {numero} — {label}", demarche[phase].strip())
+
+
+def _val(ligne, cle: str):
+    """Accès tolérant (sqlite3.Row ou dict) : None si la colonne n'existe pas."""
+    try:
+        return ligne[cle]
+    except (KeyError, IndexError):
+        return None
+
+
+def _slide_cv(prs: Presentation, ligne) -> None:
+    """Fiche CV d'un consultant, clonée depuis la slide CV du template.
+
+    Tout ce qui est propre au consultant de l'exemple (photo, logos de ses
+    clients, intitulés d'expertise) est remplacé ou retiré : rien de son
+    profil ne doit être attribué à un autre consultant.
+    """
+    slide = _dupliquer_slide(prs, _IDX_CV)
+
+    nom_complet = f"{_val(ligne, 'prenom') or ''} {(_val(ligne, 'nom') or '').upper()}".strip()
+    _set_placeholder(slide, 0, nom_complet)
+
+    sous_titre = []
+    if _val(ligne, "annees_experience"):
+        sous_titre.append(f"{ligne['annees_experience']} années d'expérience")
+    if _val(ligne, "titre"):
+        sous_titre.append(ligne["titre"])
+    grade = _val(ligne, "grade") or _val(ligne, "seniorite")
+    if grade and grade not in sous_titre:
+        sous_titre.append(grade)
+    _set_placeholder(slide, 11, "\n".join(sous_titre) or nom_complet)
+
+    cv_brut = _val(ligne, "cv_complet_json")
+    cv = json.loads(cv_brut) if isinstance(cv_brut, str) and cv_brut else (cv_brut or {})
+
+    formation = _val(ligne, "formation") or cv.get("formation") or ""
+    _remplacer_texte(_forme(slide, "ZoneTexte 10").text_frame, formation)
+
+    # Bandeaux d'expertise de l'exemple -> intitulés génériques.
+    _remplacer_texte(_forme(slide, "ZoneTexte 13", recursif=True).text_frame, "Expériences significatives")
+    _remplacer_texte(_forme(slide, "ZoneTexte 21", recursif=True).text_frame, "Compétences clés")
+
+    # Expériences : la synthèse ciblée mission (S3) en priorité, sinon les
+    # expériences brutes du CV importé.
+    synthese = (_val(ligne, "synthese_cv") or "").strip()
+    if not synthese:
+        synthese = "\n".join(
+            f"{exp.get('client', '')} — {exp.get('description', '')}".strip(" —")
+            for exp in cv.get("experiences", [])[:4]
+        )
+    _remplacer_texte(_forme(slide, "Tableau 3").table.cell(0, 0).text_frame, synthese)
+
+    # Compétences : réparties sur les 3 zones du bas (2 par zone, comme le modèle).
+    competences = [c for c in cv.get("competences", []) if isinstance(c, str)][:6]
+    for i, nom_zone in enumerate(("ZoneTexte 50", "ZoneTexte 51", "ZoneTexte 52")):
+        _remplacer_texte(_forme(slide, nom_zone).text_frame, competences[i * 2:i * 2 + 2] or [""])
+
+    # Photo : celle du consultant si disponible, sinon on retire celle de l'exemple.
+    photo = _forme(slide, "object 19")
+    photo_path = _val(ligne, "photo_path")
+    if photo is not None:
+        if photo_path and Path(photo_path).exists():
+            left, top, width, height = photo.left, photo.top, photo.width, photo.height
+            photo._element.getparent().remove(photo._element)
+            slide.shapes.add_picture(photo_path, left, top, width, height)
+        else:
+            photo._element.getparent().remove(photo._element)
+
+    # Logos des clients de l'exemple (colonne de droite) : retirés.
+    for shape in list(slide.shapes):
+        if shape.shape_type == 13 and shape.left and shape.left > _CV_LIMITE_LOGOS:  # PICTURE
+            shape._element.getparent().remove(shape._element)
+
+
+def _section_equipe(prs: Presentation, lignes: list) -> None:
+    if not lignes:
+        return
+    _intercalaire(prs, "Équipe proposée")
+    for ligne in lignes:
+        _slide_cv(prs, ligne)
 
 
 def _styler_entete_ligne(ligne, gras: bool, fond: RGBColor | None, couleur_texte: RGBColor | None) -> None:
@@ -256,6 +382,7 @@ def generer_pptx(*, demande: dict, lignes: list, chemin_sortie, contenu: dict | 
     _presentation_cabinet(prs)
     _section_contexte(prs, contenu)
     _section_demarche(prs, contenu)
+    _section_equipe(prs, lignes)
     _intercalaire(prs, "Proposition commerciale")
     total = _slide_budget(prs, lignes)
     _slide_fin(prs)

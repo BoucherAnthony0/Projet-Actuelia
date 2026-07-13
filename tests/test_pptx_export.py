@@ -39,9 +39,14 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     demande = {"titre": "Mission de démonstration RFX000TEST", "reference": "RFX000TEST"}
     lignes = [
         {"prenom": "Alice", "nom": "Dupont", "grade": "Manager 2 (M2)", "seniorite": None,
-         "nb_jours": 20, "tjm_applique": 1370},
+         "titre": "Actuaire Senior", "nb_jours": 20, "tjm_applique": 1370,
+         "annees_experience": 8, "formation": "Master Actuariat, ISFA Lyon",
+         "synthese_cv": "Synthèse ciblée mission pour Alice.", "photo_path": None,
+         "cv_complet_json": '{"competences": ["Solvabilité 2", "Python"], "experiences": []}'},
         {"prenom": "Bob", "nom": "Martin", "grade": "Junior 1 (J1)", "seniorite": None,
-         "nb_jours": 15, "tjm_applique": 820},
+         "titre": None, "nb_jours": 15, "tjm_applique": 820,
+         "annees_experience": None, "formation": None, "synthese_cv": None, "photo_path": None,
+         "cv_complet_json": '{"competences": [], "experiences": [{"client": "MutuelleX", "description": "Reporting QRT"}]}'},
     ]
     contenu = {
         "contexte_redige": "Le client souhaite fiabiliser son processus de test RFX000TEST.",
@@ -78,6 +83,35 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
         assert texte in tout_le_texte, f"phase {phase} absente du PowerPoint"
     assert "Phase 1 — Cadrage" in tout_le_texte
     assert "Phase 5 — Restitution" in tout_le_texte
+
+    # Fiches CV : une par consultant retenu, avec la synthèse S3 (ou les
+    # expériences du CV importé à défaut), sans rien hériter du consultant
+    # de l'exemple du template (nom, expertises, photo, logos clients).
+    texte_complet = " ".join(
+        shape.text_frame.text
+        for slide in prs.slides
+        for shape in pptx_export._formes(slide)
+        if shape.has_text_frame
+    )
+    tables = " ".join(
+        cell.text
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.has_table
+        for row in shape.table.rows
+        for cell in row.cells
+    )
+    assert "Alice DUPONT" in texte_complet
+    assert "Bob MARTIN" in texte_complet
+    assert "Synthèse ciblée mission pour Alice." in tables
+    assert "MutuelleX — Reporting QRT" in tables
+    assert "FITOUCHI" not in texte_complet
+    assert "Pilotage des risques santé" not in texte_complet
+    slides_cv = [s for s in prs.slides if s.slide_layout.name == "Slide CV"]
+    assert len(slides_cv) == 2
+    for slide_cv in slides_cv:
+        photos = [s for s in slide_cv.shapes if s.shape_type == 13]
+        assert photos == [], "photo/logos de l'exemple encore présents sur une fiche CV"
 
 
 @pytest.mark.skipif(

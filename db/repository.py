@@ -215,7 +215,8 @@ def remove_ligne(con, demande_id: int, consultant_id: int) -> None:
 
 def list_lignes(con, demande_id: int) -> list:
     return con.execute(
-        "SELECT dc.*, c.nom, c.prenom, c.titre, c.seniorite "
+        "SELECT dc.*, c.nom, c.prenom, c.titre, c.seniorite, "
+        "       c.annees_experience, c.formation, c.photo_path, c.cv_complet_json "
         "FROM demande_consultants dc "
         "JOIN consultants c ON c.id = dc.consultant_id "
         "WHERE dc.demande_id=? "
