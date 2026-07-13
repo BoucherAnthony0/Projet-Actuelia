@@ -1,4 +1,4 @@
-# Actuelia — Génération de propositions · **Semaine 4 (en cours)**
+# Actuelia — Génération de propositions · **Semaine 4**
 
 Outil interne qui génère le contenu d'une proposition commerciale en réponse à
 un appel d'offres. Le calcul financier est **100% déterministe** (jamais
@@ -23,11 +23,14 @@ en fin de projet).
   - synthèse CV par consultant retenu, ciblée sur le besoin, sans invention
     (strictement bornée au CV réel importé).
 
-- **S4 — Export PowerPoint** *(en cours)* : génération d'une proposition
-  `.pptx` fidèle au template de marque Actuelia (page de garde, présentation
-  du cabinet, budget), à partir des données déjà saisies. Phase 1 livrée :
-  couverture, sommaire, présentation du cabinet, budget par ligne, slide de
-  fin. À venir : slides contexte/démarche, fiches CV par consultant.
+- **S4 — Export PowerPoint** : génération d'une proposition `.pptx` fidèle
+  au template de marque Actuelia, à partir des données déjà saisies, sans
+  ressaisie : couverture (titre + date), sommaire, présentation du cabinet,
+  compréhension du besoin, démarche d'intervention (une slide par phase),
+  fiches CV par consultant retenu (photo/synthèse/compétences, zéro élément
+  hérité de l'exemple du template), tableau budget déterministe, slide de
+  fin. Les sections dont le contenu n'a pas été rédigé sont simplement
+  omises du fichier généré.
 
 ### Hors périmètre pour l'instant
 - RAG des anciennes propositions / chromadb / embeddings (Semaine 5)

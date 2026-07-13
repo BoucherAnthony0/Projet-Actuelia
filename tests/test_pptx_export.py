@@ -137,3 +137,25 @@ def test_generer_pptx_sans_contenu_redige_omet_les_sections(tmp_path) -> None:
     # doivent exister ("Compréhension du besoin" reste légitime au sommaire).
     assert "Phase 1 — Cadrage" not in tout_le_texte
     assert "Contexte de la mission" not in tout_le_texte
+
+
+@pytest.mark.skipif(
+    not config.TEMPLATE_PPTX_PATH.exists(),
+    reason="data/template_proposition.pptx est un fichier confidentiel local, absent en CI",
+)
+def test_generer_pptx_avec_cv_json_corrompu_ne_plante_pas(tmp_path) -> None:
+    from pptx import Presentation
+
+    lignes = [{"prenom": "Zoé", "nom": "Faure", "grade": None, "seniorite": "Senior",
+               "titre": None, "nb_jours": 5, "tjm_applique": 1000,
+               "annees_experience": None, "formation": None, "synthese_cv": None,
+               "photo_path": None, "cv_complet_json": "{pas du json"}]
+    sortie = tmp_path / "cv_corrompu.pptx"
+
+    pptx_export.generer_pptx(demande={"titre": "T", "reference": "R"},
+                             lignes=lignes, chemin_sortie=sortie, contenu=None)
+
+    prs = Presentation(sortie)
+    texte = " ".join(s.text_frame.text for sl in prs.slides
+                     for s in pptx_export._formes(sl) if s.has_text_frame)
+    assert "Zoé FAURE" in texte  # la fiche existe malgré le CV corrompu

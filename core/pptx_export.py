@@ -247,7 +247,15 @@ def _slide_cv(prs: Presentation, ligne) -> None:
     _set_placeholder(slide, 11, "\n".join(sous_titre) or nom_complet)
 
     cv_brut = _val(ligne, "cv_complet_json")
-    cv = json.loads(cv_brut) if isinstance(cv_brut, str) and cv_brut else (cv_brut or {})
+    if isinstance(cv_brut, str) and cv_brut:
+        try:
+            cv = json.loads(cv_brut)
+        except ValueError:
+            cv = {}  # CV importé corrompu : la fiche reste générable, juste moins remplie
+    else:
+        cv = cv_brut or {}
+    if not isinstance(cv, dict):
+        cv = {}
 
     formation = _val(ligne, "formation") or cv.get("formation") or ""
     _remplacer_texte(_forme(slide, "ZoneTexte 10").text_frame, formation)
