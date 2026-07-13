@@ -20,6 +20,7 @@ from pptx.util import Pt
 
 import config
 from . import finance
+from .redaction import DEMARCHE_LABELS
 
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
@@ -29,20 +30,25 @@ _IDX_SOMMAIRE = 1
 _IDX_INTERCALAIRE_CABINET = 2
 _IDX_CABINET_DEBUT = 3
 _IDX_CABINET_FIN = 8  # inclus
+_IDX_SLIDE_TEXTE = 10  # slide texte "propre" : titre + sous-titre + corps
 _IDX_INTERCALAIRE_COMMERCIAL = 29
 _IDX_BUDGET = 30
 _IDX_FIN = 31
 
 _COULEUR_ENTETE = RGBColor(0x44, 0x54, 0x6A)  # dk2 du thème Actuelia
 
-SOMMAIRE_SECTIONS = (
-    "Présentation du cabinet",
-    "Compréhension du besoin",
-    "Notre vision de la mission",
-    "Démarche d'intervention",
-    "Équipe proposée",
-    "Proposition commerciale",
-)
+_MOIS_FR = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+            "août", "septembre", "octobre", "novembre", "décembre")
+
+# Libellés du sommaire : placeholder idx -> texte. Le 6e item du sommaire du
+# template est une zone de texte libre (pas un placeholder), gérée à part.
+_SOMMAIRE_PLACEHOLDERS = {
+    13: "Présentation du cabinet",
+    17: "Compréhension du besoin",
+    18: "Démarche d'intervention",
+    19: "Équipe proposée",
+    20: "Proposition commerciale",
+}
 
 
 def template_disponible() -> bool:
@@ -107,26 +113,61 @@ def _ouvrir_gabarit() -> Presentation:
 def _slide_couverture(prs: Presentation, titre_mission: str) -> None:
     slide = _dupliquer_slide(prs, _IDX_COUVERTURE)
     _set_placeholder(slide, 0, f"Réponse à appel d'offres :\n{titre_mission}")
-    _set_placeholder(slide, 13, date.today().strftime("%B %Y"))
+    aujourd_hui = date.today()
+    _set_placeholder(slide, 13, f"{_MOIS_FR[aujourd_hui.month - 1].capitalize()} {aujourd_hui.year}")
     _supprimer_forme(slide, "Picture 2")  # logo du client de l'exemple d'origine
 
 
 def _slide_sommaire(prs: Presentation) -> None:
-    _dupliquer_slide(prs, _IDX_SOMMAIRE)
-    # Les libellés par défaut du template correspondent déjà aux 6 sections
-    # cibles (Présentation du cabinet ... Proposition commerciale) ; rien à
-    # changer tant que le contenu généré suit cette même structure.
+    slide = _dupliquer_slide(prs, _IDX_SOMMAIRE)
+    for idx, texte in _SOMMAIRE_PLACEHOLDERS.items():
+        _set_placeholder(slide, idx, texte)
+    # Le 6e item du sommaire du template est une zone de texte libre héritée
+    # de l'exemple ("Proposition commerciale") : nos sections tiennent en 5
+    # entrées, on la retire pour ne pas afficher un doublon.
+    for shape in list(slide.shapes):
+        if not shape.is_placeholder and shape.has_text_frame \
+                and "Proposition commerciale" in shape.text_frame.text:
+            shape._element.getparent().remove(shape._element)
 
 
 def _presentation_cabinet(prs: Presentation) -> None:
+    _dupliquer_slide(prs, _IDX_INTERCALAIRE_CABINET)
     for idx in range(_IDX_CABINET_DEBUT, _IDX_CABINET_FIN + 1):
         _dupliquer_slide(prs, idx)
-    _dupliquer_slide(prs, _IDX_INTERCALAIRE_CABINET)
 
 
 def _intercalaire(prs: Presentation, titre: str) -> None:
     slide = _dupliquer_slide(prs, _IDX_INTERCALAIRE_COMMERCIAL)
     _set_placeholder(slide, 0, titre)
+
+
+def _slide_texte(prs: Presentation, titre: str, sous_titre: str, corps: str) -> None:
+    """Slide de contenu texte au gabarit du template (titre de section + sous-titre + corps)."""
+    slide = _dupliquer_slide(prs, _IDX_SLIDE_TEXTE)
+    _set_placeholder(slide, 0, titre)
+    _set_placeholder(slide, 13, sous_titre)
+    _set_placeholder(slide, 1, corps)
+
+
+def _section_contexte(prs: Presentation, contenu: dict) -> None:
+    contexte = (contenu or {}).get("contexte_redige", "").strip()
+    if not contexte:
+        return
+    _intercalaire(prs, "Compréhension du besoin")
+    _slide_texte(prs, "Compréhension du besoin", "Contexte de la mission", contexte)
+
+
+def _section_demarche(prs: Presentation, contenu: dict) -> None:
+    demarche = (contenu or {}).get("demarche", {}) or {}
+    phases = [(phase, label) for phase, label in DEMARCHE_LABELS.items()
+              if (demarche.get(phase) or "").strip()]
+    if not phases:
+        return
+    _intercalaire(prs, "Démarche d'intervention")
+    for numero, (phase, label) in enumerate(phases, start=1):
+        _slide_texte(prs, "Démarche d'intervention",
+                     f"Phase {numero} — {label}", demarche[phase].strip())
 
 
 def _styler_entete_ligne(ligne, gras: bool, fond: RGBColor | None, couleur_texte: RGBColor | None) -> None:
@@ -145,6 +186,12 @@ def _slide_budget(prs: Presentation, lignes: list) -> float:
     """Ajoute la slide budget. Retourne le total (calculé par core/finance, jamais par le LLM)."""
     slide = _dupliquer_slide(prs, _IDX_BUDGET)
     _set_placeholder(slide, 0, "Proposition commerciale")
+    total_jours = sum(float(ligne["nb_jours"] or 0) for ligne in lignes)
+    _set_placeholder(
+        slide, 1,
+        "Le tableau ci-dessous récapitule le budget évalué pour la mission, "
+        f"sur une base de {total_jours:g} jours et des profils mobilisés :",
+    )
 
     ancienne = _forme(slide, "Tableau 5")
     left, top, width = ancienne.left, ancienne.top, ancienne.width
@@ -194,8 +241,12 @@ def _retirer_slides_modele(prs: Presentation, n: int) -> None:
         id_list.remove(sld)
 
 
-def generer_pptx(*, demande: dict, lignes: list, chemin_sortie) -> float:
-    """Génère le fichier .pptx sur disque. Retourne le total mission (déterministe)."""
+def generer_pptx(*, demande: dict, lignes: list, chemin_sortie, contenu: dict | None = None) -> float:
+    """Génère le fichier .pptx sur disque. Retourne le total mission (déterministe).
+
+    contenu = contenu_genere_json de la demande (contexte rédigé + démarche S3) ;
+    les sections correspondantes sont simplement omises s'il est absent ou vide.
+    """
     prs = _ouvrir_gabarit()
     n_slides_modele = len(prs.slides)
 
@@ -203,6 +254,8 @@ def generer_pptx(*, demande: dict, lignes: list, chemin_sortie) -> float:
     _slide_couverture(prs, titre_mission)
     _slide_sommaire(prs)
     _presentation_cabinet(prs)
+    _section_contexte(prs, contenu)
+    _section_demarche(prs, contenu)
     _intercalaire(prs, "Proposition commerciale")
     total = _slide_budget(prs, lignes)
     _slide_fin(prs)
