@@ -8,6 +8,14 @@ from . import llm
 
 PHASES_DEMARCHE = ("cadrage", "analyse", "realisation", "accompagnement", "restitution")
 
+DEMARCHE_LABELS = {
+    "cadrage": "Cadrage",
+    "analyse": "Analyse",
+    "realisation": "Réalisation",
+    "accompagnement": "Accompagnement",
+    "restitution": "Restitution",
+}
+
 SYSTEM_REDACTION = (
     "Tu es un consultant senior qui rédige le contenu d'une proposition commerciale "
     "en réponse à un appel d'offres. À partir de l'analyse fournie (contexte, objectifs, "

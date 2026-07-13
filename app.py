@@ -7,13 +7,7 @@ from core import analyse, cv_import, finance, parsing, pptx_export, redaction
 
 st.set_page_config(page_title="Actuelia", page_icon="📇", layout="wide")
 
-DEMARCHE_LABELS = {
-    "cadrage": "Cadrage",
-    "analyse": "Analyse",
-    "realisation": "Réalisation",
-    "accompagnement": "Accompagnement",
-    "restitution": "Restitution",
-}
+DEMARCHE_LABELS = redaction.DEMARCHE_LABELS
 
 
 @st.cache_resource
@@ -499,20 +493,24 @@ with tab_contenu:
                 "Template PowerPoint introuvable (`data/template_proposition.pptx`). "
                 "Fichier local volontairement hors Git — voir le README."
             )
-        elif st.button("Générer le PowerPoint"):
-            lignes_budget = repository.list_lignes(con, demande_id)
-            nom_fichier = f"{(demande['reference'] or f'demande-{demande_id}').replace(' ', '_')}.pptx"
-            chemin_sortie = config.PROPOSITIONS_DIR / nom_fichier
-            try:
-                total = pptx_export.generer_pptx(demande=demande, lignes=lignes_budget, chemin_sortie=chemin_sortie)
-                repository.create_proposition(
-                    con, demande_id=demande_id, client_id=demande["client_id"],
-                    titre=demande["titre"], chemin_pptx=str(chemin_sortie),
-                )
-                st.session_state["pptx_genere"] = str(chemin_sortie)
-                st.success(f"PowerPoint généré (budget total : {total:,.0f} €).".replace(",", " "))
-            except Exception as e:
-                st.error(f"Génération impossible : {e}")
+        else:
+            st.caption("L'export reprend le contenu **enregistré** (pensez à « Enregistrer le contenu » avant de générer).")
+            if st.button("Générer le PowerPoint"):
+                lignes_budget = repository.list_lignes(con, demande_id)
+                nom_fichier = f"{(demande['reference'] or f'demande-{demande_id}').replace(' ', '_')}.pptx"
+                chemin_sortie = config.PROPOSITIONS_DIR / nom_fichier
+                contenu_persiste = json.loads(demande["contenu_genere_json"]) if demande["contenu_genere_json"] else None
+                try:
+                    total = pptx_export.generer_pptx(demande=demande, lignes=lignes_budget,
+                                                     chemin_sortie=chemin_sortie, contenu=contenu_persiste)
+                    repository.create_proposition(
+                        con, demande_id=demande_id, client_id=demande["client_id"],
+                        titre=demande["titre"], chemin_pptx=str(chemin_sortie),
+                    )
+                    st.session_state["pptx_genere"] = str(chemin_sortie)
+                    st.success(f"PowerPoint généré (budget total : {total:,.0f} €).".replace(",", " "))
+                except Exception as e:
+                    st.error(f"Génération impossible : {e}")
 
         chemin_genere = st.session_state.get("pptx_genere")
         if chemin_genere and Path(chemin_genere).exists():

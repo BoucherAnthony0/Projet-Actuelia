@@ -43,9 +43,20 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
         {"prenom": "Bob", "nom": "Martin", "grade": "Junior 1 (J1)", "seniorite": None,
          "nb_jours": 15, "tjm_applique": 820},
     ]
+    contenu = {
+        "contexte_redige": "Le client souhaite fiabiliser son processus de test RFX000TEST.",
+        "demarche": {
+            "cadrage": "Ateliers de cadrage de démonstration.",
+            "analyse": "Analyse de démonstration.",
+            "realisation": "Réalisation de démonstration.",
+            "accompagnement": "Accompagnement de démonstration.",
+            "restitution": "Restitution de démonstration.",
+        },
+    }
     sortie = tmp_path / "generation.pptx"
 
-    total = pptx_export.generer_pptx(demande=demande, lignes=lignes, chemin_sortie=sortie)
+    total = pptx_export.generer_pptx(demande=demande, lignes=lignes,
+                                     chemin_sortie=sortie, contenu=contenu)
 
     assert total == finance.total_mission(lignes)
     assert sortie.exists()
@@ -61,3 +72,34 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     # exemples de missions clientes réelles du template ne doit avoir fuité.
     assert "Mission de démonstration RFX000TEST" in tout_le_texte
     assert "Fonction Publique" not in tout_le_texte
+    # Le contexte rédigé et les 5 phases de la démarche doivent apparaître.
+    assert contenu["contexte_redige"] in tout_le_texte
+    for phase, texte in contenu["demarche"].items():
+        assert texte in tout_le_texte, f"phase {phase} absente du PowerPoint"
+    assert "Phase 1 — Cadrage" in tout_le_texte
+    assert "Phase 5 — Restitution" in tout_le_texte
+
+
+@pytest.mark.skipif(
+    not config.TEMPLATE_PPTX_PATH.exists(),
+    reason="data/template_proposition.pptx est un fichier confidentiel local, absent en CI",
+)
+def test_generer_pptx_sans_contenu_redige_omet_les_sections(tmp_path) -> None:
+    from pptx import Presentation
+
+    demande = {"titre": "Mission sans contenu", "reference": "RFX000VIDE"}
+    sortie = tmp_path / "generation_vide.pptx"
+
+    pptx_export.generer_pptx(demande=demande, lignes=[], chemin_sortie=sortie, contenu=None)
+
+    prs = Presentation(sortie)
+    tout_le_texte = " ".join(
+        shape.text_frame.text
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.has_text_frame
+    )
+    # Sans contenu rédigé, ni la slide contexte ni les slides de phases ne
+    # doivent exister ("Compréhension du besoin" reste légitime au sommaire).
+    assert "Phase 1 — Cadrage" not in tout_le_texte
+    assert "Contexte de la mission" not in tout_le_texte
