@@ -23,14 +23,16 @@ en fin de projet).
   - synthèse CV par consultant retenu, ciblée sur le besoin, sans invention
     (strictement bornée au CV réel importé).
 
-- **S4 — Export PowerPoint** : génération d'une proposition `.pptx` fidèle
-  au template de marque Actuelia, à partir des données déjà saisies, sans
-  ressaisie : couverture (titre + date), sommaire, présentation du cabinet,
-  compréhension du besoin, démarche d'intervention (une slide par phase),
-  fiches CV par consultant retenu (photo/synthèse/compétences, zéro élément
-  hérité de l'exemple du template), tableau budget déterministe, slide de
-  fin. Les sections dont le contenu n'a pas été rédigé sont simplement
-  omises du fichier généré.
+- **S4 — Export PowerPoint** : génération d'une proposition `.pptx` en
+  remplissant la trame de marque Actuelia (`data/template_proposition.pptx`,
+  une trame « à trous » de 10 slides avec des marqueurs `[...]`) à partir des
+  données déjà saisies, sans ressaisie : page de garde (référence, intitulé,
+  date, rédacteur), contexte, modalités d'intervention (frise à 4 phases —
+  la démarche générée à 5 phases fusionne accompagnement + restitution),
+  une fiche CV par consultant retenu (nom, grade, formation, synthèse /
+  expériences), tableau budget déterministe + total. Les marqueurs sans
+  donnée (durée des phases, coordonnées du rédacteur si laissées vides) sont
+  conservés tels quels dans le fichier généré, à compléter dans PowerPoint.
 
 ### Hors périmètre pour l'instant
 - RAG des anciennes propositions / chromadb / embeddings (Semaine 5)

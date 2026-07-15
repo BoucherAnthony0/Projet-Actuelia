@@ -495,14 +495,22 @@ with tab_contenu:
             )
         else:
             st.caption("L'export reprend le contenu **enregistré** (pensez à « Enregistrer le contenu » avant de générer).")
+            st.markdown("**Rédacteur (page de garde)** — laissez vide pour conserver les marqueurs à compléter dans PowerPoint.")
+            rc1, rc2 = st.columns(2)
+            red_nom = rc1.text_input("Nom du rédacteur", key="red_nom")
+            red_fonction = rc2.text_input("Fonction", key="red_fonction")
+            red_email = rc1.text_input("Email", key="red_email")
+            red_tel = rc2.text_input("Téléphone", key="red_tel")
             if st.button("Générer le PowerPoint"):
                 lignes_budget = repository.list_lignes(con, demande_id)
                 nom_fichier = f"{(demande['reference'] or f'demande-{demande_id}').replace(' ', '_')}.pptx"
                 chemin_sortie = config.PROPOSITIONS_DIR / nom_fichier
                 contenu_persiste = json.loads(demande["contenu_genere_json"]) if demande["contenu_genere_json"] else None
+                redacteur = {"nom": red_nom, "fonction": red_fonction, "email": red_email, "telephone": red_tel}
                 try:
                     total = pptx_export.generer_pptx(demande=demande, lignes=lignes_budget,
-                                                     chemin_sortie=chemin_sortie, contenu=contenu_persiste)
+                                                     chemin_sortie=chemin_sortie, contenu=contenu_persiste,
+                                                     redacteur=redacteur)
                     repository.create_proposition(
                         con, demande_id=demande_id, client_id=demande["client_id"],
                         titre=demande["titre"], chemin_pptx=str(chemin_sortie),
