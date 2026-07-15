@@ -36,6 +36,26 @@ def test_rediger_contenu_gere_demarche_partielle() -> None:
     assert resultat["demarche"] == {phase: "" for phase in redaction.PHASES_DEMARCHE}
 
 
+def test_rediger_contenu_tolere_demarche_imbriquee_et_variantes() -> None:
+    # Le LLM gratuit renvoie parfois la démarche imbriquée et le contexte sous une clé variante.
+    fake = {
+        "comprehension": "Compréhension via clé variante.",
+        "demarche": {
+            "cadrage": "Cadrage imbriqué.",
+            "analyse": "Analyse imbriquée.",
+            "realisation": "Réalisation imbriquée.",
+            "accompagnement": "Accompagnement imbriqué.",
+            "restitution": "Restitution imbriquée.",
+        },
+    }
+    with patch("core.redaction.llm.complete_json", return_value=fake):
+        resultat = redaction.rediger_contenu({})
+
+    assert resultat["contexte_redige"] == "Compréhension via clé variante."
+    assert resultat["demarche"]["cadrage"] == "Cadrage imbriqué."
+    assert resultat["demarche"]["restitution"] == "Restitution imbriquée."
+
+
 def test_synthese_cv_ne_pioche_que_dans_le_cv_source() -> None:
     cv = {
         "experiences": [
@@ -55,6 +75,15 @@ def test_synthese_cv_ne_pioche_que_dans_le_cv_source() -> None:
     assert "N'invente RIEN" in system_prompt
     assert resultat["synthese"] == fake["synthese"]
     assert resultat["experiences_retenues"] == fake["experiences_retenues"]
+
+
+def test_synthese_cv_tolere_cles_variantes_et_chaine() -> None:
+    fake = {"summary": "Synthèse via clé anglaise.", "experiences": "Exp 1\nExp 2"}
+    with patch("core.redaction.llm.complete_json", return_value=fake):
+        resultat = redaction.synthetiser_cv({"competences": ["X"]}, {})
+
+    assert resultat["synthese"] == "Synthèse via clé anglaise."
+    assert resultat["experiences_retenues"] == ["Exp 1", "Exp 2"]
 
 
 def test_contenu_genere_et_synthese_persistent_et_sont_editables() -> None:

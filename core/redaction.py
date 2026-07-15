@@ -43,19 +43,66 @@ SYSTEM_SYNTHESE_CV = (
 )
 
 
+# Le LLM gratuit renvoie parfois des clés en variantes (anglais, imbriquées) :
+# on rapatrie chaque champ vers sa clé canonique.
+_ALIAS_CONTEXTE = ("contexte_redige", "contexte", "comprehension", "comprehension_besoin",
+                   "understanding", "context")
+_ALIAS_PHASE = {
+    "cadrage": ("demarche_cadrage", "cadrage", "framing", "scoping"),
+    "analyse": ("demarche_analyse", "analyse", "analysis"),
+    "realisation": ("demarche_realisation", "realisation", "réalisation", "execution", "implementation"),
+    "accompagnement": ("demarche_accompagnement", "accompagnement", "support", "coaching"),
+    "restitution": ("demarche_restitution", "restitution", "delivery", "reporting"),
+}
+_ALIAS_SYNTHESE = ("synthese", "synthèse", "summary", "resume")
+_ALIAS_EXPERIENCES = ("experiences_retenues", "experiences", "expériences", "experiences_selectionnees",
+                      "selected_experiences", "experience")
+
+
+def _deballer(resultat: dict) -> dict:
+    """Déballe un éventuel enrobage {"proposition": {...}} renvoyé par certains modèles."""
+    if isinstance(resultat, dict) and len(resultat) == 1:
+        seule = next(iter(resultat.values()))
+        if isinstance(seule, dict):
+            return seule
+    return resultat if isinstance(resultat, dict) else {}
+
+
+def _premier_present(source: dict, cles: tuple):
+    for cle in cles:
+        if cle in source and source[cle] not in (None, "", [], {}):
+            return source[cle]
+    return None
+
+
 def rediger_contenu(analyse_json: dict) -> dict:
     user = json.dumps(analyse_json or {}, ensure_ascii=False)
-    resultat = llm.complete_json(SYSTEM_REDACTION, user)
+    resultat = _deballer(llm.complete_json(SYSTEM_REDACTION, user))
+
+    # La démarche peut arriver à plat (demarche_cadrage) ou imbriquée ({"demarche": {"cadrage": ...}}).
+    demarche_imbriquee = resultat.get("demarche") if isinstance(resultat.get("demarche"), dict) else {}
+
+    def _phase(nom: str) -> str:
+        valeur = _premier_present(resultat, _ALIAS_PHASE[nom])
+        if not valeur and demarche_imbriquee:
+            valeur = _premier_present(demarche_imbriquee, _ALIAS_PHASE[nom] + (nom,))
+        return valeur or ""
+
     return {
-        "contexte_redige": resultat.get("contexte_redige") or "",
-        "demarche": {phase: resultat.get(f"demarche_{phase}") or "" for phase in PHASES_DEMARCHE},
+        "contexte_redige": _premier_present(resultat, _ALIAS_CONTEXTE) or "",
+        "demarche": {phase: _phase(phase) for phase in PHASES_DEMARCHE},
     }
 
 
 def synthetiser_cv(cv_complet: dict, analyse_json: dict) -> dict:
     user = json.dumps({"cv": cv_complet or {}, "besoin": analyse_json or {}}, ensure_ascii=False)
-    resultat = llm.complete_json(SYSTEM_SYNTHESE_CV, user)
+    resultat = _deballer(llm.complete_json(SYSTEM_SYNTHESE_CV, user))
+
+    experiences = _premier_present(resultat, _ALIAS_EXPERIENCES)
+    if isinstance(experiences, str):
+        experiences = [ligne.strip() for ligne in experiences.splitlines() if ligne.strip()]
+
     return {
-        "synthese": resultat.get("synthese") or "",
-        "experiences_retenues": list(resultat.get("experiences_retenues") or []),
+        "synthese": _premier_present(resultat, _ALIAS_SYNTHESE) or "",
+        "experiences_retenues": list(experiences or []),
     }
