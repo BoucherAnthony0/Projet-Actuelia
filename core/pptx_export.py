@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.oxml.ns import qn
 from pptx.util import Emu
 
 import config
@@ -247,6 +248,89 @@ def _modalites(prs, demande: dict, contenu: dict | None) -> None:
             _definir_texte(case_desc.text_frame, f" {texte}" if texte else " ")
 
 
+def _charger_cv(ligne) -> dict:
+    brut = _valeur(ligne, "cv_complet_json")
+    if isinstance(brut, str) and brut:
+        try:
+            cv = json.loads(brut)
+        except ValueError:
+            cv = {}
+    else:
+        cv = brut or {}
+    return cv if isinstance(cv, dict) else {}
+
+
+def _textes_runs(p_element) -> list:
+    return p_element.findall(".//" + qn("a:t"))
+
+
+def _definir_runs(p_element, valeurs) -> None:
+    """Fixe le texte des runs d'un paragraphe (None = run inchangé, garde son label)."""
+    for t, valeur in zip(_textes_runs(p_element), valeurs):
+        if valeur is not None:
+            t.text = valeur
+
+
+def _equipe_projet(slide, lignes: list) -> None:
+    """Remplit « L'équipe projet » : un bloc par consultant, bloc superviseur retiré."""
+    if not lignes:
+        return
+    intro = _forme(slide, "Espace réservé du contenu 22")
+    if intro is None or not intro.has_text_frame:
+        return
+    body = intro.text_frame._txBody
+    paras = body.findall(qn("a:p"))
+
+    def texte(p):
+        return "".join((t.text or "") for t in p.findall(".//" + qn("a:t")))
+
+    i_header = next((i for i, p in enumerate(paras) if "équipe projet" in texte(p)), None)
+    i_footer = next((i for i, p in enumerate(paras) if "Démarche opérationnelle" in texte(p)), None)
+    modele_id = next((p for p in paras if "Intervenant principal" in texte(p)), None)
+    modele_exp = next((p for p in paras if texte(p).startswith("Expertise")), None)
+    modele_role = next((p for p in paras if texte(p).startswith("Rôle :") and "[Responsab" in texte(p)), None)
+    if i_header is None or i_footer is None or modele_id is None:
+        return
+
+    nouveaux = []
+    for ligne in lignes:
+        nom = f"{_valeur(ligne, 'prenom') or ''} {(_valeur(ligne, 'nom') or '').upper()}".strip()
+        grade = _valeur(ligne, "grade") or _valeur(ligne, "seniorite") or ""
+        xp = _valeur(ligne, "annees_experience")
+        role = _valeur(ligne, "role_sur_mission")
+        reste = f"– {grade}" if grade else "–"
+        if xp:
+            reste += f", {xp} ans d'expérience"
+        if role:
+            reste += f" ({role})"
+        pid = copy.deepcopy(modele_id)
+        _definir_runs(pid, [f"{nom} ", reste])
+        nouveaux.append(pid)
+
+        expertise = (_valeur(ligne, "synthese_cv") or "").strip()
+        if not expertise:
+            competences = [c for c in _charger_cv(ligne).get("competences", []) if isinstance(c, str)]
+            expertise = ", ".join(competences)
+        if expertise and modele_exp is not None:
+            pe = copy.deepcopy(modele_exp)
+            _definir_runs(pe, [None, expertise])
+            nouveaux.append(pe)
+
+        if role and modele_role is not None:
+            pr = copy.deepcopy(modele_role)
+            _definir_runs(pr, [None, role])
+            nouveaux.append(pr)
+
+    # Retire l'ancien bloc équipe (entre l'en-tête et le pied, bloc superviseur
+    # compris) puis insère les nouveaux blocs, dans l'ordre.
+    for p in paras[i_header + 1:i_footer]:
+        body.remove(p)
+    ref = paras[i_header]
+    for p in nouveaux:
+        ref.addnext(p)
+        ref = p
+
+
 def _fiche_cv(slide, ligne) -> None:
     def val(cle):
         try:
@@ -268,16 +352,7 @@ def _fiche_cv(slide, ligne) -> None:
     if st is not None:
         _definir_texte(st.text_frame, [entete or "[Titre, Grade]", xp])
 
-    cv_brut = val("cv_complet_json")
-    if isinstance(cv_brut, str) and cv_brut:
-        try:
-            cv = json.loads(cv_brut)
-        except ValueError:
-            cv = {}
-    else:
-        cv = cv_brut or {}
-    if not isinstance(cv, dict):
-        cv = {}
+    cv = _charger_cv(ligne)
 
     formation = val("formation") or cv.get("formation") or ""
     zt10 = _forme(slide, "ZoneTexte 10")
@@ -399,6 +474,7 @@ def generer_pptx(*, demande, lignes: list, chemin_sortie,
     _couverture(prs, demande, redacteur)
     _contexte(prs, contenu)
     _modalites(prs, demande, contenu)
+    _equipe_projet(prs.slides[_IDX_MODALITES], lignes)
     total = _budget(prs, demande, lignes)
     _section_equipe(prs, lignes)
 

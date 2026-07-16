@@ -118,6 +118,18 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "35 jours" in textes  # 20 + 15
     assert "39 700" in textes    # total mission
 
+    # Équipe projet (slide Modalités) : un bloc par consultant, superviseur retiré,
+    # aucun marqueur de nom résiduel.
+    modalites = " ".join(
+        s.text_frame.text for s in pptx_export._formes(prs.slides[6]) if s.has_text_frame
+    )
+    assert "Alice DUPONT" in modalites
+    assert "Bob MARTIN" in modalites
+    assert "Synthèse ciblée mission pour Alice." in modalites  # expertise = synthèse
+    assert "Superviseur" not in modalites
+    assert "[Prénom NOM]" not in modalites
+    assert "Démarche opérationnelle proposée" in modalites  # pied de section conservé
+
 
 @pytest.mark.skipif(
     not config.TEMPLATE_PPTX_PATH.exists(),
