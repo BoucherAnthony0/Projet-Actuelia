@@ -390,6 +390,12 @@ def _fiche_cv(slide, ligne) -> None:
             groupe._element.getparent().remove(groupe._element)
             table_shape._element.getparent().remove(table_shape._element)
 
+    # Photo et logos du collaborateur qui a servi d'exemple dans le template :
+    # ils ne s'appliquent pas aux autres consultants -> on les retire.
+    for shape in list(slide.shapes):
+        if shape.shape_type == 13:  # PICTURE
+            shape._element.getparent().remove(shape._element)
+
 
 def _budget(prs, demande: dict, lignes: list) -> float:
     slide = prs.slides[_IDX_BUDGET]

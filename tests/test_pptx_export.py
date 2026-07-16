@@ -112,6 +112,9 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "Bob MARTIN" in textes
     assert "Synthèse ciblée mission pour Alice." in tables
     assert "Reporting QRT" in tables
+    # Les images du collaborateur-exemple du template sont retirées des fiches CV.
+    for slide_cv in [s for s in prs.slides if s.slide_layout.name == "Slide CV"]:
+        assert [s for s in slide_cv.shapes if s.shape_type == 13] == []
     # Budget : une ligne par consultant + totaux dans l'intro.
     assert "Manager 2 (M2)" in tables
     assert "1 370 €" in tables
