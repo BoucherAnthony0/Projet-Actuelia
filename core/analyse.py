@@ -45,12 +45,15 @@ def _premier_present(analyse: dict, cles: tuple):
 
 
 def analyser_demande(texte_brut: str) -> dict:
+    from .redaction import _normaliser_dict  # normalisation partagée (minuscules, sans accents)
+
     brut = llm.complete_json(SYSTEM, texte_brut[:12000])
     # Tolère un éventuel enrobage {"analyse": {...}} renvoyé par certains modèles.
     if isinstance(brut, dict) and len(brut) == 1:
         seule = next(iter(brut.values()))
         if isinstance(seule, dict):
             brut = seule
+    brut = _normaliser_dict(brut)
 
     def _liste(valeur):
         if isinstance(valeur, str):

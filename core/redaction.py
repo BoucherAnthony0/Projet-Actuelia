@@ -4,6 +4,8 @@ Le calcul financier reste 100% déterministe (core/finance.py) : ce module ne
 rédige que du texte, jamais des chiffres.
 """
 import json
+import unicodedata
+
 from . import llm
 
 PHASES_DEMARCHE = ("cadrage", "analyse", "realisation", "accompagnement", "restitution")
@@ -59,6 +61,18 @@ _ALIAS_EXPERIENCES = ("experiences_retenues", "experiences", "expériences", "ex
                       "selected_experiences", "experience")
 
 
+def _normaliser_cle(cle: str) -> str:
+    """minuscules + accents retirés : « Démarche_Cadrage » -> « demarche_cadrage »."""
+    nfd = unicodedata.normalize("NFD", str(cle))
+    return "".join(c for c in nfd if not unicodedata.combining(c)).lower().strip()
+
+
+def _normaliser_dict(source) -> dict:
+    if not isinstance(source, dict):
+        return {}
+    return {_normaliser_cle(k): v for k, v in source.items()}
+
+
 def _deballer(resultat: dict) -> dict:
     """Déballe un éventuel enrobage {"proposition": {...}} renvoyé par certains modèles."""
     if isinstance(resultat, dict) and len(resultat) == 1:
@@ -75,12 +89,14 @@ def _premier_present(source: dict, cles: tuple):
     return None
 
 
-def rediger_contenu(analyse_json: dict) -> dict:
+def rediger_contenu(analyse_json: dict, *, retourner_brut: bool = False):
+    """Rédige contexte + démarche. Avec retourner_brut=True, renvoie (contenu, réponse_llm_brute)."""
     user = json.dumps(analyse_json or {}, ensure_ascii=False)
-    resultat = _deballer(llm.complete_json(SYSTEM_REDACTION, user))
+    brut = llm.complete_json(SYSTEM_REDACTION, user)
+    resultat = _normaliser_dict(_deballer(brut))
 
     # La démarche peut arriver à plat (demarche_cadrage) ou imbriquée ({"demarche": {"cadrage": ...}}).
-    demarche_imbriquee = resultat.get("demarche") if isinstance(resultat.get("demarche"), dict) else {}
+    demarche_imbriquee = _normaliser_dict(resultat.get("demarche"))
 
     def _phase(nom: str) -> str:
         valeur = _premier_present(resultat, _ALIAS_PHASE[nom])
@@ -88,21 +104,25 @@ def rediger_contenu(analyse_json: dict) -> dict:
             valeur = _premier_present(demarche_imbriquee, _ALIAS_PHASE[nom] + (nom,))
         return valeur or ""
 
-    return {
+    contenu = {
         "contexte_redige": _premier_present(resultat, _ALIAS_CONTEXTE) or "",
         "demarche": {phase: _phase(phase) for phase in PHASES_DEMARCHE},
     }
+    return (contenu, brut) if retourner_brut else contenu
 
 
-def synthetiser_cv(cv_complet: dict, analyse_json: dict) -> dict:
+def synthetiser_cv(cv_complet: dict, analyse_json: dict, *, retourner_brut: bool = False):
+    """Synthèse CV ciblée mission. Avec retourner_brut=True, renvoie (résultat, réponse_llm_brute)."""
     user = json.dumps({"cv": cv_complet or {}, "besoin": analyse_json or {}}, ensure_ascii=False)
-    resultat = _deballer(llm.complete_json(SYSTEM_SYNTHESE_CV, user))
+    brut = llm.complete_json(SYSTEM_SYNTHESE_CV, user)
+    resultat = _normaliser_dict(_deballer(brut))
 
     experiences = _premier_present(resultat, _ALIAS_EXPERIENCES)
     if isinstance(experiences, str):
         experiences = [ligne.strip() for ligne in experiences.splitlines() if ligne.strip()]
 
-    return {
+    contenu = {
         "synthese": _premier_present(resultat, _ALIAS_SYNTHESE) or "",
         "experiences_retenues": list(experiences or []),
     }
+    return (contenu, brut) if retourner_brut else contenu
