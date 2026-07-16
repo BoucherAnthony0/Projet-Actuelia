@@ -25,13 +25,18 @@ SYSTEM_REDACTION = (
     "ces 6 clés, toutes à la racine du JSON (aucune imbrication) : "
     '{"contexte_redige": str, "demarche_cadrage": str, "demarche_analyse": str, '
     '"demarche_realisation": str, "demarche_accompagnement": str, "demarche_restitution": str}. '
-    "contexte_redige : paragraphe de compréhension du besoin, professionnel et concis. "
+    "contexte_redige : un paragraphe DÉVELOPPÉ de compréhension du besoin (6 à 10 phrases) "
+    "qui reformule la situation du client, ses objectifs, ses enjeux et ce qui est attendu "
+    "du prestataire, sur un ton professionnel et engageant. "
     "demarche_cadrage / demarche_analyse / demarche_realisation / demarche_accompagnement / "
-    "demarche_restitution : pour CHACUNE de ces 5 phases, un paragraphe concret décrivant "
-    "les actions menées sur cette mission. "
-    "IMPÉRATIF : les 6 clés doivent TOUTES contenir du texte non vide, même générique si "
-    "l'analyse fournie est succincte — ne laisse jamais une clé vide ou absente. "
-    "N'invente pas d'information absente de l'analyse fournie."
+    "demarche_restitution : pour CHACUNE de ces 5 phases, un paragraphe SUBSTANTIEL de 4 à 6 "
+    "phrases décrivant concrètement les actions menées, la méthode employée, les points de "
+    "vigilance et les livrables produits à cette phase. Sois précis et concret, évite les "
+    "généralités creuses. "
+    "IMPÉRATIF : les 6 clés doivent TOUTES contenir un paragraphe étoffé et non vide, même si "
+    "l'analyse fournie est succincte (déduis alors une démarche plausible et standard du "
+    "métier) — ne laisse jamais une clé vide, absente ou réduite à une phrase. "
+    "N'invente pas de faits précis (chiffres, noms, dates) absents de l'analyse fournie."
 )
 
 SYSTEM_SYNTHESE_CV = (
@@ -40,8 +45,12 @@ SYSTEM_SYNTHESE_CV = (
     "expériences et compétences présentes dans le CV fourni (cv_complet_json). "
     "N'invente RIEN qui ne soit pas dans le CV : ni expérience, ni compétence, ni client, "
     "ni durée. Si le CV ne contient pas d'expérience pertinente pour un aspect du besoin, "
-    "ignore cet aspect plutôt que d'inventer. Réponds en JSON : "
-    '{"synthese": str, "experiences_retenues": [str]}.'
+    "ignore cet aspect plutôt que d'inventer. "
+    "synthese : un paragraphe DÉVELOPPÉ de 4 à 7 phrases mettant en valeur, à partir du CV, "
+    "le parcours, les domaines d'expertise et les réalisations du consultant en lien avec la "
+    "mission — exploite toute la matière pertinente du CV plutôt qu'une phrase minimale. "
+    "experiences_retenues : liste des expériences du CV les plus pertinentes, reformulées. "
+    "Réponds en JSON : {\"synthese\": str, \"experiences_retenues\": [str]}."
 )
 
 
