@@ -101,10 +101,11 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "[Prénom NOM]" not in garde
     # Contexte rédigé.
     assert contenu["contexte_redige"] in textes
-    # Démarche : 5 phases générées -> 4 cases (accompagnement + restitution fusionnés).
-    assert "Accompagnement & Restitution" in textes
+    # Démarche : la frise (4 cases, débordait) est remplacée par les 5 phases en texte.
+    assert "Cadrage :" in textes
+    assert "Restitution :" in textes
     assert "Restitution de démonstration." in textes
-    assert "[Phase 1]" not in textes  # marqueurs de la frise remplacés
+    assert "[Phase 1]" not in textes  # frise retirée
     # Client injecté dans les modalités.
     assert "ClientDemo" in textes
     # Fiches CV : une par consultant, avec leur vrai nom (marqueur remplacé sur ces slides).

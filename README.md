@@ -27,12 +27,14 @@ en fin de projet).
   remplissant la trame de marque Actuelia (`data/template_proposition.pptx`,
   une trame « à trous » de 10 slides avec des marqueurs `[...]`) à partir des
   données déjà saisies, sans ressaisie : page de garde (référence, intitulé,
-  date, rédacteur), contexte, modalités d'intervention (frise à 4 phases —
-  la démarche générée à 5 phases fusionne accompagnement + restitution — et
-  bloc « L'équipe projet » : un paragraphe par consultant retenu, expertise
-  depuis sa synthèse CV, bloc superviseur retiré), une fiche CV par
-  consultant retenu (nom, grade, formation, synthèse / expériences), tableau
-  budget déterministe + total. Les marqueurs sans
+  date, rédacteur), contexte, modalités d'intervention (bloc « L'équipe
+  projet » = un paragraphe par consultant retenu avec expertise depuis sa
+  synthèse CV, bloc superviseur retiré ; puis la démarche d'intervention en
+  texte, une ligne par phase des 5 — la frise graphique du template, qui
+  débordait avec des descriptions longues, est retirée quand la démarche est
+  rédigée), une fiche CV par consultant retenu (nom, grade, formation,
+  synthèse / expériences, sans les images de l'exemple), tableau budget
+  déterministe + total. Les marqueurs sans
   donnée (durée des phases, coordonnées du rédacteur si laissées vides) sont
   conservés tels quels dans le fichier généré, à compléter dans PowerPoint.
 

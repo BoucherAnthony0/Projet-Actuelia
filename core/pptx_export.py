@@ -22,6 +22,7 @@ from pptx.util import Emu
 
 import config
 from . import finance
+from .redaction import DEMARCHE_LABELS, PHASES_DEMARCHE
 
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
@@ -210,42 +211,55 @@ def _contexte(prs, contenu: dict | None) -> None:
         _definir_texte(zone.text_frame, contexte)
 
 
+def _retirer_frise(slide) -> None:
+    """Retire la frise graphique des phases (ovales, pictos, groupes, zones de
+    texte des phases) : elle ne tient pas des paragraphes de démarche."""
+    for shape in list(slide.shapes):
+        if shape.name in ("Titre 2", "Espace réservé du contenu 22") or shape.is_placeholder:
+            continue
+        shape._element.getparent().remove(shape._element)
+
+
 def _modalites(prs, demande: dict, contenu: dict | None) -> None:
     slide = prs.slides[_IDX_MODALITES]
-    client = demande.get("client_nom") or "[Client]"
     intro = _forme(slide, "Espace réservé du contenu 22")
-    if intro is not None and intro.has_text_frame:
-        _remplacer_marqueurs(intro.text_frame, {"[Client]": client})
+    if intro is None or not intro.has_text_frame:
+        return
+    _remplacer_marqueurs(intro.text_frame, {"[Client]": demande.get("client_nom") or "[Client]"})
 
     demarche = (contenu or {}).get("demarche", {}) or {}
-    if not any((demarche.get(p) or "").strip() for p in demarche):
-        return  # démarche non rédigée : on laisse les marqueurs [Phase N]
+    phases = [(DEMARCHE_LABELS[p], (demarche.get(p) or "").strip()) for p in PHASES_DEMARCHE]
+    phases = [(label, desc) for label, desc in phases if desc]
+    if not phases:
+        return  # démarche non rédigée : on laisse la frise et ses marqueurs [Phase N]
 
-    def _jointe(*cles):
-        return "\n".join((demarche.get(c) or "").strip() for c in cles if (demarche.get(c) or "").strip())
+    # Frise remplacée par la démarche en texte (5 phases) dans le corps : la
+    # frise à 4 cases débordait dès que les descriptions étaient longues.
+    _retirer_frise(slide)
 
-    # 5 phases générées -> 4 cases du template (accompagnement + restitution fusionnés).
-    phases = [
-        ("Cadrage", demarche.get("cadrage") or ""),
-        ("Analyse", demarche.get("analyse") or ""),
-        ("Réalisation", demarche.get("realisation") or ""),
-        ("Accompagnement & Restitution", _jointe("accompagnement", "restitution")),
-    ]
+    body = intro.text_frame._txBody
+    paras = body.findall(qn("a:p"))
 
-    # Cases de titre (ZoneTexte 25-28) et de description, appariées par position horizontale.
-    cases_titre = sorted(
-        [_forme(slide, f"ZoneTexte {n}") for n in (25, 26, 27, 28)],
-        key=lambda s: s.left or 0,
-    )
-    cases_desc = sorted(
-        [_forme(slide, f"ZoneTexte {n}") for n in (33, 34, 35, 36)],
-        key=lambda s: s.left or 0,
-    )
-    for (label, texte), case_titre, case_desc in zip(phases, cases_titre, cases_desc):
-        if case_titre is not None:
-            _definir_texte(case_titre.text_frame, label)
-        if case_desc is not None:
-            _definir_texte(case_desc.text_frame, f" {texte}" if texte else " ")
+    def texte(p):
+        return "".join((t.text or "") for t in p.findall(".//" + qn("a:t")))
+
+    footer = next((p for p in paras if "Démarche opérationnelle" in texte(p)), None)
+    # Modèle « label gras : contenu normal » : le paragraphe Expertise du template.
+    modele = next((p for p in paras if texte(p).startswith("Expertise")), None)
+    if modele is None:
+        modele = footer
+    ref = footer if footer is not None else (paras[-1] if len(paras) else None)
+    if ref is None or modele is None:
+        return
+    for label, desc in phases:
+        p = copy.deepcopy(modele)
+        _definir_runs(p, [f"{label} : ", desc])
+        ref.addnext(p)
+        ref = p
+
+    # Agrandit la zone de texte pour absorber tout le contenu (équipe + démarche).
+    intro.height = Emu(int(9.2 * 914400))
+    intro.text_frame.word_wrap = True
 
 
 def _charger_cv(ligne) -> dict:
