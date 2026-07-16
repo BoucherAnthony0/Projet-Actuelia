@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
@@ -91,6 +92,16 @@ def _definir_texte(text_frame, lignes) -> None:
     for ligne in lignes[1:]:
         corps.append(copy.deepcopy(premier._p))
         _ecrire(text_frame.paragraphs[-1], ligne)
+
+
+def _reduire_si_deborde(text_frame) -> None:
+    """« Réduire le texte en cas de débordement » : PowerPoint rétrécit la police
+    pour que le contenu (souvent long, généré par le LLM) tienne dans la forme."""
+    try:
+        text_frame.word_wrap = True
+        text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    except Exception:
+        pass
 
 
 def _remplacer_marqueurs(text_frame, remplacements: dict) -> None:
@@ -257,9 +268,10 @@ def _modalites(prs, demande: dict, contenu: dict | None) -> None:
         ref.addnext(p)
         ref = p
 
-    # Agrandit la zone de texte pour absorber tout le contenu (équipe + démarche).
+    # Agrandit la zone puis réduit la police si le contenu (équipe + démarche)
+    # déborde encore.
     intro.height = Emu(int(9.2 * 914400))
-    intro.text_frame.word_wrap = True
+    _reduire_si_deborde(intro.text_frame)
 
 
 def _charger_cv(ligne) -> dict:
@@ -321,10 +333,10 @@ def _equipe_projet(slide, lignes: list) -> None:
         _definir_runs(pid, [f"{nom} ", reste])
         nouveaux.append(pid)
 
-        expertise = (_valeur(ligne, "synthese_cv") or "").strip()
-        if not expertise:
-            competences = [c for c in _charger_cv(ligne).get("competences", []) if isinstance(c, str)]
-            expertise = ", ".join(competences)
+        # Expertise = compétences (court) sur la slide Modalités ; la synthèse
+        # détaillée figure sur la fiche CV, pour ne pas surcharger cette slide.
+        competences = [c for c in _charger_cv(ligne).get("competences", []) if isinstance(c, str)]
+        expertise = ", ".join(competences) or (_valeur(ligne, "synthese_cv") or "").strip()
         if expertise and modele_exp is not None:
             pe = copy.deepcopy(modele_exp)
             _definir_runs(pe, [None, expertise])
@@ -372,6 +384,7 @@ def _fiche_cv(slide, ligne) -> None:
     zt10 = _forme(slide, "ZoneTexte 10")
     if zt10 is not None and formation:
         _definir_texte(zt10.text_frame, formation)
+        _reduire_si_deborde(zt10.text_frame)
 
     # Deux blocs d'expérience : bloc 1 (haut, ~top 4.4) et bloc 2 (bas, ~top 8.5).
     tables_shapes = sorted(_formes_nommees(slide, "Tableau 3"), key=lambda s: s.top or 0)
@@ -398,7 +411,9 @@ def _fiche_cv(slide, ligne) -> None:
             for sub in groupe.shapes:
                 if sub.has_text_frame and "intitulé de la mi" in sub.text_frame.text:
                     _definir_texte(sub.text_frame, intitule)
-            _definir_texte(table_shape.table.cell(0, 0).text_frame, description)
+            cellule = table_shape.table.cell(0, 0)
+            _definir_texte(cellule.text_frame, description)
+            _reduire_si_deborde(cellule.text_frame)
         else:
             # Bloc sans contenu : on le retire pour ne pas laisser de marqueurs.
             groupe._element.getparent().remove(groupe._element)

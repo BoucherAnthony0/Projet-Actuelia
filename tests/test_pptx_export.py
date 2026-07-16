@@ -129,7 +129,8 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     )
     assert "Alice DUPONT" in modalites
     assert "Bob MARTIN" in modalites
-    assert "Synthèse ciblée mission pour Alice." in modalites  # expertise = synthèse
+    assert "Solvabilité 2" in modalites  # expertise = compétences (court), pas la synthèse
+    assert "Synthèse ciblée mission pour Alice." not in modalites  # la synthèse reste sur la fiche CV
     assert "Superviseur" not in modalites
     assert "[Prénom NOM]" not in modalites
     assert "Démarche opérationnelle proposée" in modalites  # pied de section conservé
