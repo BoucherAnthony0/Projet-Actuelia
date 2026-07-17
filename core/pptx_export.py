@@ -12,11 +12,14 @@ reconstruire des slides. Le calcul financier reste 100% déterministe
 calculés, jamais de calcul lui-même.
 """
 import copy
+import io
 import json
 import re
+import zipfile
 from datetime import date
 from pathlib import Path
 
+from lxml import etree
 from pptx import Presentation
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
@@ -676,6 +679,84 @@ def _section_equipe(prs, lignes: list, *, slides_avant, slides_fin, demarche_sli
 
 
 # --------------------------------------------------------------------------- #
+#  Sauvegarde fidèle au template
+# --------------------------------------------------------------------------- #
+_CT_NS = "{http://schemas.openxmlformats.org/package/2006/content-types}"
+_CT_SLIDE = "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"
+
+
+def _canonique(donnees: bytes, nom: str):
+    """Forme comparable d'une part : ignore la sérialisation (déclaration XML,
+    entités, fins de ligne), pas le contenu. Les .rels sont comparées triées."""
+    if not nom.endswith((".xml", ".rels")):
+        return donnees
+    try:
+        arbre = etree.fromstring(donnees)
+    except etree.XMLSyntaxError:
+        return donnees
+    if nom.endswith(".rels"):
+        return b"|".join(sorted(etree.tostring(e) for e in arbre))
+    return etree.tostring(arbre)
+
+
+def _content_types_fideles(template_zip, noms_generes: set) -> bytes:
+    """[Content_Types].xml du template, ajusté au minimum : retire les parts
+    disparues, ajoute les slides créées. Tout le reste (Defaults svg compris)
+    est conservé tel quel."""
+    arbre = etree.fromstring(template_zip.read("[Content_Types].xml"))
+    presentes = {"/" + n for n in noms_generes}
+    couverts = set()
+    for o in list(arbre.iter(_CT_NS + "Override")):
+        if o.get("PartName") not in presentes:
+            arbre.remove(o)
+        else:
+            couverts.add(o.get("PartName"))
+    for n in sorted(noms_generes):
+        pn = "/" + n
+        if pn in couverts:
+            continue
+        # Les slides exigent leur Override (le Default « xml » ne suffit pas) ;
+        # les autres nouveautés (.rels, médias) sont couvertes par les Defaults.
+        if n.startswith("ppt/slides/slide") and n.endswith(".xml"):
+            o = etree.SubElement(arbre, _CT_NS + "Override")
+            o.set("PartName", pn)
+            o.set("ContentType", _CT_SLIDE)
+    return etree.tostring(arbre, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
+def _sauvegarder_fidele(prs, chemin_sortie) -> None:
+    """Sauvegarde en préservant à l'octet près les parts non modifiées.
+
+    python-pptx resérialise TOUT le paquet à la sauvegarde (déclarations XML,
+    entités, ordre des entrées zip, content-types recomposés) ; PowerPoint
+    s'est montré capricieux sur ce re-encodage, jusqu'à afficher blanches des
+    slides du template pourtant jamais touchées. On ne réécrit donc que les
+    parts réellement modifiées par la génération, tout le reste est recopié
+    tel quel depuis le template, dans l'ordre d'origine."""
+    tampon = io.BytesIO()
+    prs.save(tampon)
+    with zipfile.ZipFile(io.BytesIO(tampon.getvalue())) as genere, \
+            zipfile.ZipFile(config.TEMPLATE_PPTX_PATH) as template, \
+            zipfile.ZipFile(chemin_sortie, "w", zipfile.ZIP_DEFLATED) as sortie:
+        noms_generes = set(genere.namelist())
+        ecrits = set()
+        for nom in template.namelist():
+            if nom == "[Content_Types].xml":
+                sortie.writestr(nom, _content_types_fideles(template, noms_generes))
+            elif nom in noms_generes:
+                brut_template = template.read(nom)
+                brut_genere = genere.read(nom)
+                identiques = _canonique(brut_template, nom) == _canonique(brut_genere, nom)
+                sortie.writestr(nom, brut_template if identiques else brut_genere)
+            else:
+                continue  # part retirée (fiche CV modèle)
+            ecrits.add(nom)
+        for nom in genere.namelist():  # nouvelles parts (démarche, fiches CV)
+            if nom not in ecrits and nom != "[Content_Types].xml":
+                sortie.writestr(nom, genere.read(nom))
+
+
+# --------------------------------------------------------------------------- #
 #  Point d'entrée
 # --------------------------------------------------------------------------- #
 def generer_pptx(*, demande, lignes: list, chemin_sortie,
@@ -703,7 +784,7 @@ def generer_pptx(*, demande, lignes: list, chemin_sortie,
     _section_equipe(prs, lignes, slides_avant=slides_avant, slides_fin=slides_fin,
                     demarche_slide=demarche_slide)
 
-    prs.save(chemin_sortie)
+    _sauvegarder_fidele(prs, chemin_sortie)
     return total
 
 

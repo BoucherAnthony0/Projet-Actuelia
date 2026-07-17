@@ -183,6 +183,27 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     partagees = {part: slides for part, slides in proprietaires.items() if len(slides) > 1}
     assert partagees == {}, f"parts exclusives partagées entre slides : {partagees}"
 
+    # Régression : les parts du template que la génération ne modifie pas doivent
+    # ressortir OCTET PAR OCTET identiques (la resérialisation par python-pptx a
+    # suffi à rendre des slides intactes blanches dans PowerPoint), et les
+    # déclarations de content-types du template (Default svg…) sont conservées.
+    with zipfile.ZipFile(config.TEMPLATE_PPTX_PATH) as zt, zipfile.ZipFile(sortie) as zs:
+        noms_sortie = set(zs.namelist())
+        modifiees_attendues = {
+            "[Content_Types].xml", "ppt/presentation.xml", "ppt/_rels/presentation.xml.rels",
+            "docProps/core.xml",
+            "ppt/slides/slide1.xml",  # page de garde
+            "ppt/slides/slide6.xml",  # contexte
+            "ppt/slides/slide7.xml",  # modalités
+            "ppt/slides/slide9.xml",  # budget
+        }
+        for nom in zt.namelist():
+            if nom in modifiees_attendues or nom not in noms_sortie:
+                continue
+            assert zt.read(nom) == zs.read(nom), f"part non modifiée réécrite : {nom}"
+        types = zs.read("[Content_Types].xml").decode("utf-8")
+        assert 'Extension="svg"' in types  # déclaration du template conservée
+
 
 @pytest.mark.skipif(
     not config.TEMPLATE_PPTX_PATH.exists(),
