@@ -148,6 +148,26 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "Démarche opérationnelle proposée" not in modalites
     assert "Restitution de démonstration." not in modalites
 
+    # Régression : une slide de notes appartient à UNE seule slide. La duplication
+    # (démarche, fiches CV) ne doit pas la partager, sinon PowerPoint refuse
+    # d'ouvrir le fichier (« endommagé ») — invisible pour python-pptx.
+    import posixpath
+    import zipfile
+    from lxml import etree
+
+    _RT_NOTES = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide"
+    proprietaires: dict[str, list[str]] = {}
+    with zipfile.ZipFile(sortie) as z:
+        for nom in z.namelist():
+            if nom.startswith("ppt/slides/_rels/") and nom.endswith(".rels"):
+                slide = "ppt/slides/" + posixpath.basename(nom)[:-5]
+                for rel in etree.fromstring(z.read(nom)):
+                    if rel.get("Type") == _RT_NOTES:
+                        cible = posixpath.normpath(posixpath.join("ppt/slides", rel.get("Target")))
+                        proprietaires.setdefault(cible, []).append(slide)
+    partagees = {notes: slides for notes, slides in proprietaires.items() if len(slides) > 1}
+    assert partagees == {}, f"slides de notes partagées entre plusieurs slides : {partagees}"
+
 
 @pytest.mark.skipif(
     not config.TEMPLATE_PPTX_PATH.exists(),

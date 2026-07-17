@@ -159,6 +159,11 @@ def _dupliquer_slide(prs, index_source):
     for rid, rel in source.part.rels.items():
         if rel.is_external:
             continue
+        # Une slide de notes appartient à UNE seule slide (elle référence sa
+        # slide en retour) : la partager entre l'original et la copie corrompt
+        # le fichier pour PowerPoint. On ne recopie donc pas ce lien.
+        if rel.reltype.endswith("/notesSlide"):
+            continue
         rid_map[rid] = dest.part.relate_to(rel.target_part, rel.reltype)
 
     for shape in source.shapes:
