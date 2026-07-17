@@ -150,25 +150,38 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "Démarche opérationnelle proposée" not in modalites
     assert "Restitution de démonstration." not in modalites
 
-    # Régression : une slide de notes appartient à UNE seule slide. La duplication
-    # (démarche, fiches CV) ne doit pas la partager, sinon PowerPoint refuse
-    # d'ouvrir le fichier (« endommagé ») — invisible pour python-pptx.
+    # Régression : les parts « slide de notes » et « tags » appartiennent à UNE
+    # seule slide, et tout r:id d'une slide doit résoudre dans ses relations.
+    # Les enfreindre rend le fichier « endommagé » pour PowerPoint (pages
+    # blanches, slides remplacées) — invisible pour python-pptx.
     import posixpath
     import zipfile
     from lxml import etree
 
-    _RT_NOTES = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide"
+    _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    _EXCLUSIVES = ("/notesSlide", "/tags")
     proprietaires: dict[str, list[str]] = {}
     with zipfile.ZipFile(sortie) as z:
         for nom in z.namelist():
-            if nom.startswith("ppt/slides/_rels/") and nom.endswith(".rels"):
-                slide = "ppt/slides/" + posixpath.basename(nom)[:-5]
-                for rel in etree.fromstring(z.read(nom)):
-                    if rel.get("Type") == _RT_NOTES:
+            if not (nom.startswith("ppt/slides/") and nom.endswith(".xml")):
+                continue
+            slide = posixpath.basename(nom)
+            rels_nom = f"ppt/slides/_rels/{slide}.rels"
+            rids = set()
+            if rels_nom in z.namelist():
+                for rel in etree.fromstring(z.read(rels_nom)):
+                    rids.add(rel.get("Id"))
+                    if rel.get("Type").endswith(_EXCLUSIVES):
                         cible = posixpath.normpath(posixpath.join("ppt/slides", rel.get("Target")))
                         proprietaires.setdefault(cible, []).append(slide)
-    partagees = {notes: slides for notes, slides in proprietaires.items() if len(slides) > 1}
-    assert partagees == {}, f"slides de notes partagées entre plusieurs slides : {partagees}"
+            arbre = etree.fromstring(z.read(nom))
+            pendantes = [
+                v for el in arbre.iter() for a, v in el.attrib.items()
+                if a.startswith(_R_NS) and v not in rids
+            ]
+            assert pendantes == [], f"{slide} : références r:id sans relation : {pendantes}"
+    partagees = {part: slides for part, slides in proprietaires.items() if len(slides) > 1}
+    assert partagees == {}, f"parts exclusives partagées entre slides : {partagees}"
 
 
 @pytest.mark.skipif(

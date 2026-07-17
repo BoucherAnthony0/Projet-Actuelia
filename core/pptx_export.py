@@ -187,30 +187,60 @@ def _remplacer_marqueurs(text_frame, remplacements: dict) -> None:
                 para.text = nouveau
 
 
-def _dupliquer_slide(prs, index_source):
-    """Duplique prs.slides[index_source] en fin de présentation (images comprises)."""
-    source = prs.slides[index_source]
-    dest = prs.slides.add_slide(source.slide_layout)
+def _slide_vierge(prs, layout):
+    """Nouvelle slide sur ce layout, débarrassée des placeholders auto-clonés."""
+    dest = prs.slides.add_slide(layout)
     for shape in list(dest.shapes):
         shape._element.getparent().remove(shape._element)
+    return dest
+
+
+def _purger_refs_orphelines(element, rid_map: dict) -> None:
+    """Retire de l'élément copié tout ce qui référence une relation non recopiée.
+
+    Un r:id qui ne résout pas dans les relations de la slide de destination
+    (tags d'add-in, notes…) suffit à faire passer le fichier pour endommagé
+    aux yeux de PowerPoint."""
+    for el in list(element.iter()):
+        for attr, val in list(el.attrib.items()):
+            if not attr.startswith("{%s}" % _R_NS):
+                continue
+            if val in rid_map:
+                el.attrib[attr] = rid_map[val]
+            else:
+                parent = el.getparent()
+                if parent is not None:
+                    parent.remove(el)
+                break
+    # Une liste de tags vidée n'a plus de raison d'être.
+    for el in list(element.iter(qn("p:custDataLst"))):
+        if len(el) == 0:
+            el.getparent().remove(el)
+
+
+def _dupliquer_slide(prs, index_source):
+    """Duplique prs.slides[index_source] en fin de présentation (images comprises).
+
+    Seules les relations partageables (images, layout) sont recopiées : les
+    parts qui appartiennent à UNE seule slide — slide de notes, tags d'add-in —
+    ne doivent jamais être référencées par deux slides, sous peine de fichier
+    « endommagé » pour PowerPoint. Les références à ces parts sont purgées du
+    XML copié."""
+    source = prs.slides[index_source]
+    dest = _slide_vierge(prs, source.slide_layout)
 
     rid_map = {}
     for rid, rel in source.part.rels.items():
+        if rel.reltype.endswith(("/notesSlide", "/tags")):
+            continue
         if rel.is_external:
-            continue
-        # Une slide de notes appartient à UNE seule slide (elle référence sa
-        # slide en retour) : la partager entre l'original et la copie corrompt
-        # le fichier pour PowerPoint. On ne recopie donc pas ce lien.
-        if rel.reltype.endswith("/notesSlide"):
-            continue
-        rid_map[rid] = dest.part.relate_to(rel.target_part, rel.reltype)
+            rid_map[rid] = dest.part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
+        else:
+            rid_map[rid] = dest.part.relate_to(rel.target_part, rel.reltype)
 
     for shape in source.shapes:
         new_el = copy.deepcopy(shape._element)
-        for el in new_el.iter():
-            for attr, val in list(el.attrib.items()):
-                if attr.startswith("{%s}" % _R_NS) and val in rid_map:
-                    el.attrib[attr] = rid_map[val]
+        _purger_refs_orphelines(new_el, rid_map)
         dest.shapes._spTree.append(new_el)
     return dest
 
