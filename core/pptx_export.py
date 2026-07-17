@@ -19,7 +19,7 @@ from pathlib import Path
 from pptx import Presentation
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
-from pptx.util import Emu
+from pptx.util import Emu, Pt
 
 import config
 from . import finance
@@ -102,6 +102,26 @@ def _reduire_si_deborde(text_frame) -> None:
         text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     except Exception:
         pass
+
+
+def _reduire_police_cellule(text_frame, longueur: int) -> None:
+    """Réduit la police d'une cellule selon la longueur du texte.
+
+    Les cellules de tableau n'honorent pas l'auto-ajustement de PowerPoint
+    (MSO_AUTO_SIZE) : on rétrécit donc explicitement pour les synthèses longues,
+    par paliers déterministes, afin qu'elles tiennent dans la case CV.
+    """
+    if longueur > 900:
+        taille = Pt(8)
+    elif longueur > 600:
+        taille = Pt(9)
+    elif longueur > 350:
+        taille = Pt(10)
+    else:
+        return
+    for para in text_frame.paragraphs:
+        for run in para.runs:
+            run.font.size = taille
 
 
 def _remplacer_marqueurs(text_frame, remplacements: dict) -> None:
@@ -238,40 +258,90 @@ def _modalites(prs, demande: dict, contenu: dict | None) -> None:
         return
     _remplacer_marqueurs(intro.text_frame, {"[Client]": demande.get("client_nom") or "[Client]"})
 
+    # La démarche est désormais isolée sur sa propre slide (_slide_demarche) pour
+    # passer à l'échelle : la frise graphique du template débordait dès que les
+    # descriptions de phase étaient longues. On la retire dès qu'une démarche est
+    # rédigée (sinon on garde la frise et ses marqueurs [Phase N]).
+    demarche = (contenu or {}).get("demarche", {}) or {}
+    if any((demarche.get(p) or "").strip() for p in PHASES_DEMARCHE):
+        _retirer_frise(slide)
+
+
+def _titre_slide(slide):
+    """Renvoie la forme titre d'une slide (par nom, sinon placeholder idx 0)."""
+    forme = _forme(slide, "Titre 2")
+    if forme is not None and forme.has_text_frame:
+        return forme
+    for ph in slide.placeholders:
+        if ph.placeholder_format.idx == 0:
+            return ph
+    return None
+
+
+def _fixer_gras(run_el, gras: bool) -> None:
+    rpr = run_el.find(qn("a:rPr"))
+    if rpr is None:
+        rpr = run_el.makeelement(qn("a:rPr"), {})
+        run_el.insert(0, rpr)
+    rpr.set("b", "1" if gras else "0")
+
+
+def _para_phase(modele_p, label: str, desc: str):
+    """Clone un paragraphe modèle en « label (gras) : desc (normal) »."""
+    p = copy.deepcopy(modele_p)
+    runs = p.findall(qn("a:r"))
+    if not runs:
+        t = p.find(".//" + qn("a:t"))
+        if t is not None:
+            t.text = f"{label}{desc}"
+        return p
+    for r in runs[1:]:
+        r.getparent().remove(r)
+    r_label = runs[0]
+    r_desc = copy.deepcopy(r_label)
+    r_label.find(qn("a:t")).text = label
+    r_desc.find(qn("a:t")).text = desc
+    _fixer_gras(r_label, True)
+    _fixer_gras(r_desc, False)
+    r_label.addnext(r_desc)
+    return p
+
+
+def _slide_demarche(prs, contenu: dict | None):
+    """Crée une slide dédiée à la démarche opérationnelle (5 phases en texte).
+
+    La frise graphique du template débordait dès que les descriptions de phase
+    étaient longues et ne passait pas à l'échelle avec le nombre de consultants.
+    On isole donc la démarche sur sa propre slide, calquée sur la charte de la
+    slide Contexte (titre + zone de contenu). Renvoie la slide créée, ou None si
+    la démarche n'a pas été rédigée.
+    """
     demarche = (contenu or {}).get("demarche", {}) or {}
     phases = [(DEMARCHE_LABELS[p], (demarche.get(p) or "").strip()) for p in PHASES_DEMARCHE]
     phases = [(label, desc) for label, desc in phases if desc]
     if not phases:
-        return  # démarche non rédigée : on laisse la frise et ses marqueurs [Phase N]
+        return None
 
-    # Frise remplacée par la démarche en texte (5 phases) dans le corps : la
-    # frise à 4 cases débordait dès que les descriptions étaient longues.
-    _retirer_frise(slide)
+    slide = _dupliquer_slide(prs, _IDX_CONTEXTE)
 
-    body = intro.text_frame._txBody
+    titre = _titre_slide(slide)
+    if titre is not None:
+        _definir_texte(titre.text_frame, "Démarche opérationnelle")
+
+    zone = _forme(slide, "Espace réservé du contenu 22")
+    if zone is None or not zone.has_text_frame:
+        return slide
+    body = zone.text_frame._txBody
     paras = body.findall(qn("a:p"))
-
-    def texte(p):
-        return "".join((t.text or "") for t in p.findall(".//" + qn("a:t")))
-
-    footer = next((p for p in paras if "Démarche opérationnelle" in texte(p)), None)
-    # Modèle « label gras : contenu normal » : le paragraphe Expertise du template.
-    modele = next((p for p in paras if texte(p).startswith("Expertise")), None)
-    if modele is None:
-        modele = footer
-    ref = footer if footer is not None else (paras[-1] if len(paras) else None)
-    if ref is None or modele is None:
-        return
+    if not paras:
+        return slide
+    modele = paras[0]
+    for p in paras:
+        body.remove(p)
     for label, desc in phases:
-        p = copy.deepcopy(modele)
-        _definir_runs(p, [f"{label} : ", desc])
-        ref.addnext(p)
-        ref = p
-
-    # Agrandit la zone puis réduit la police si le contenu (équipe + démarche)
-    # déborde encore.
-    intro.height = Emu(int(9.2 * 914400))
-    _reduire_si_deborde(intro.text_frame)
+        body.append(_para_phase(modele, f"{label} : ", desc))
+    _reduire_si_deborde(zone.text_frame)
+    return slide
 
 
 def _charger_cv(ligne) -> dict:
@@ -297,8 +367,12 @@ def _definir_runs(p_element, valeurs) -> None:
             t.text = valeur
 
 
-def _equipe_projet(slide, lignes: list) -> None:
-    """Remplit « L'équipe projet » : un bloc par consultant, bloc superviseur retiré."""
+def _equipe_projet(slide, lignes: list, *, retirer_pied_demarche: bool = False) -> None:
+    """Remplit « L'équipe projet » : un bloc par consultant, bloc superviseur retiré.
+
+    retirer_pied_demarche : retire le pied « Démarche opérationnelle proposée : »
+    quand la démarche est portée par sa propre slide (sinon il reste orphelin).
+    """
     if not lignes:
         return
     intro = _forme(slide, "Espace réservé du contenu 22")
@@ -355,6 +429,11 @@ def _equipe_projet(slide, lignes: list) -> None:
     for p in nouveaux:
         ref.addnext(p)
         ref = p
+
+    if retirer_pied_demarche and paras[i_footer].getparent() is not None:
+        paras[i_footer].getparent().remove(paras[i_footer])
+
+    _reduire_si_deborde(intro.text_frame)
 
 
 def _fiche_cv(slide, ligne) -> None:
@@ -413,7 +492,7 @@ def _fiche_cv(slide, ligne) -> None:
                     _definir_texte(sub.text_frame, intitule)
             cellule = table_shape.table.cell(0, 0)
             _definir_texte(cellule.text_frame, description)
-            _reduire_si_deborde(cellule.text_frame)
+            _reduire_police_cellule(cellule.text_frame, len(description or ""))
         else:
             # Bloc sans contenu : on le retire pour ne pas laisser de marqueurs.
             groupe._element.getparent().remove(groupe._element)
@@ -474,22 +553,26 @@ def _a_valeur(ligne, cle) -> bool:
     return _valeur(ligne, cle) not in (None, "")
 
 
-def _section_equipe(prs, lignes: list) -> None:
-    """Duplique la fiche CV pour chaque consultant, la remplit, et retire la trame."""
-    budget_slide = prs.slides[_IDX_BUDGET]
-    fin_slides = [prs.slides[i] for i in range(_IDX_BUDGET, len(prs.slides))]
-    avant = [prs.slides[i] for i in range(_IDX_CV)]  # slides 0..6
+def _section_equipe(prs, lignes: list, *, slides_avant, slides_fin, demarche_slide=None) -> None:
+    """Duplique la fiche CV pour chaque consultant, la remplit, et réordonne.
 
+    Ordre final : intro (slides 0..6) + démarche (si rédigée) + fiches CV +
+    budget/fin. La fiche CV modèle (index 7, avec ses marqueurs) est exclue dès
+    qu'au moins un consultant est retenu. Les références de slides sont fournies
+    par l'appelant, capturées AVANT toute duplication.
+    """
     fiches = []
     for ligne in lignes:
         fiche = _dupliquer_slide(prs, _IDX_CV)
         _fiche_cv(fiche, ligne)
         fiches.append(fiche)
 
+    milieu = [demarche_slide] if demarche_slide is not None else []
     if fiches:
-        # Ordre final : intro (0..6) + fiches CV + budget + fin ; la fiche
-        # modèle (index 7, avec ses marqueurs) est exclue.
-        _reordonner(prs, avant + fiches + fin_slides)
+        _reordonner(prs, slides_avant + milieu + fiches + slides_fin)
+    elif milieu:
+        # Démarche rédigée mais aucun consultant : on conserve la fiche CV modèle.
+        _reordonner(prs, slides_avant + milieu + [prs.slides[_IDX_CV]] + slides_fin)
 
 
 # --------------------------------------------------------------------------- #
@@ -506,12 +589,19 @@ def generer_pptx(*, demande, lignes: list, chemin_sortie,
     demande = _en_dict(demande, ("titre", "reference", "client_nom"))
     prs = _ouvrir_gabarit()
 
+    # Références des slides d'origine, capturées avant toute duplication.
+    slides_avant = [prs.slides[i] for i in range(_IDX_CV)]  # 0..6 (Modalités inclus)
+    slides_fin = [prs.slides[i] for i in range(_IDX_BUDGET, len(prs.slides))]  # 8..9
+
     _couverture(prs, demande, redacteur)
     _contexte(prs, contenu)
     _modalites(prs, demande, contenu)
-    _equipe_projet(prs.slides[_IDX_MODALITES], lignes)
+    demarche_slide = _slide_demarche(prs, contenu)
+    _equipe_projet(prs.slides[_IDX_MODALITES], lignes,
+                   retirer_pied_demarche=demarche_slide is not None)
     total = _budget(prs, demande, lignes)
-    _section_equipe(prs, lignes)
+    _section_equipe(prs, lignes, slides_avant=slides_avant, slides_fin=slides_fin,
+                    demarche_slide=demarche_slide)
 
     prs.save(chemin_sortie)
     return total

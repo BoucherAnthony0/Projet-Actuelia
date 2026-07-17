@@ -101,11 +101,22 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "[Prénom NOM]" not in garde
     # Contexte rédigé.
     assert contenu["contexte_redige"] in textes
-    # Démarche : la frise (4 cases, débordait) est remplacée par les 5 phases en texte.
+    # Démarche : slide dédiée (titre + 5 phases en texte), la frise est retirée.
     assert "Cadrage :" in textes
     assert "Restitution :" in textes
     assert "Restitution de démonstration." in textes
     assert "[Phase 1]" not in textes  # frise retirée
+    slides_demarche = [
+        s for s in prs.slides
+        if any(sh.has_text_frame and sh.text_frame.text.strip() == "Démarche opérationnelle"
+               for sh in pptx_export._formes(s))
+    ]
+    assert len(slides_demarche) == 1  # une seule slide démarche dédiée
+    txt_demarche = " ".join(
+        sh.text_frame.text for sh in pptx_export._formes(slides_demarche[0]) if sh.has_text_frame
+    )
+    assert "Cadrage :" in txt_demarche
+    assert "Restitution de démonstration." in txt_demarche
     # Client injecté dans les modalités.
     assert "ClientDemo" in textes
     # Fiches CV : une par consultant, avec leur vrai nom (marqueur remplacé sur ces slides).
@@ -133,7 +144,9 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     assert "Synthèse ciblée mission pour Alice." not in modalites  # la synthèse reste sur la fiche CV
     assert "Superviseur" not in modalites
     assert "[Prénom NOM]" not in modalites
-    assert "Démarche opérationnelle proposée" in modalites  # pied de section conservé
+    # La démarche a migré sur sa propre slide : ni le pied ni les phases ne restent ici.
+    assert "Démarche opérationnelle proposée" not in modalites
+    assert "Restitution de démonstration." not in modalites
 
 
 @pytest.mark.skipif(
