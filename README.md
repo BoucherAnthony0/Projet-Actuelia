@@ -23,14 +23,33 @@ en fin de projet).
   - synthèse CV par consultant retenu, ciblée sur le besoin, sans invention
     (strictement bornée au CV réel importé).
 
-- **S4 — Export PowerPoint** : génération d'une proposition `.pptx` fidèle
-  au template de marque Actuelia, à partir des données déjà saisies, sans
-  ressaisie : couverture (titre + date), sommaire, présentation du cabinet,
-  compréhension du besoin, démarche d'intervention (une slide par phase),
-  fiches CV par consultant retenu (photo/synthèse/compétences, zéro élément
-  hérité de l'exemple du template), tableau budget déterministe, slide de
-  fin. Les sections dont le contenu n'a pas été rédigé sont simplement
-  omises du fichier généré.
+- **S4 — Export PowerPoint** : génération d'une proposition `.pptx` en
+  remplissant la trame de marque Actuelia (`data/template_proposition.pptx`,
+  une trame « à trous » de 10 slides avec des marqueurs `[...]`) à partir des
+  données déjà saisies, sans ressaisie :
+  - page de garde (référence, intitulé, date, rédacteur), contexte rédigé ;
+  - modalités d'intervention : bloc « L'équipe projet » avec, par consultant
+    retenu, Expertise (compétences du CV), Valeur ajoutée (début de la
+    synthèse ciblée mission) et Rôle ; bloc superviseur retiré ;
+  - une slide dédiée « Démarche opérationnelle » (les 5 phases en texte,
+    libellé en gras) insérée entre les modalités et les fiches CV — la frise
+    graphique du template, qui débordait, est retirée quand la démarche est
+    rédigée ;
+  - une fiche CV par consultant retenu (nom, grade, formation, synthèse /
+    expériences, sans les images de l'exemple), tableau budget déterministe
+    + total.
+
+  La mise en page est **anti-débordement de façon déterministe** : la taille
+  de police des zones remplies est calculée d'après les dimensions réelles de
+  la zone (14 → 8 pt par paliers), car l'auto-ajustement PowerPoint est ignoré
+  par Google Slides. La sauvegarde est **fidèle au template** : seules les
+  parts réellement modifiées sont réécrites, tout le reste est recopié octet
+  par octet (des slides intactes ressortaient blanches sinon), et les parts
+  exclusives à une slide (notes, tags) ne sont jamais partagées lors des
+  duplications — chaque point couvert par un test de régression. Les marqueurs
+  sans donnée (durée des phases, coordonnées du rédacteur si laissées vides)
+  sont conservés tels quels dans le fichier généré, à compléter dans
+  PowerPoint.
 
 ### Hors périmètre pour l'instant
 - RAG des anciennes propositions / chromadb / embeddings (Semaine 5)

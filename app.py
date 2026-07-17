@@ -426,27 +426,47 @@ with tab_contenu:
         st.divider()
         st.subheader("Contexte & démarche d'intervention")
 
+        # Les clés sont préfixées par la demande pour éviter qu'un texte d'une
+        # demande ne « déteigne » sur une autre.
+        cle_contexte = f"contexte_area_{demande_id}"
+        cles_demarche = {phase: f"demarche_{phase}_{demande_id}" for phase in DEMARCHE_LABELS}
+
+        # Pré-remplissage initial depuis la base (uniquement si la clé n'existe
+        # pas encore : Streamlit ignore ensuite le paramètre value des widgets
+        # à clé, il faut donc piloter leur contenu via session_state).
+        st.session_state.setdefault(cle_contexte, contenu.get("contexte_redige", ""))
+        for phase, cle in cles_demarche.items():
+            st.session_state.setdefault(cle, (contenu.get("demarche") or {}).get(phase, ""))
+
         if st.button("Générer le contenu (LLM)"):
             try:
-                contenu = redaction.rediger_contenu(analyse_json)
+                genere, brut = redaction.rediger_contenu(analyse_json, retourner_brut=True)
+                st.session_state["redaction_brut"] = brut
+                st.session_state[cle_contexte] = genere["contexte_redige"]
+                for phase, cle in cles_demarche.items():
+                    st.session_state[cle] = genere["demarche"].get(phase, "")
                 st.success("Contenu généré : relisez et corrigez avant enregistrement.")
+                if not genere["contexte_redige"] or not any(genere["demarche"].values()):
+                    st.warning("Le LLM a laissé des champs vides — voir la réponse brute ci-dessous.")
             except Exception as e:
                 st.error(f"Génération impossible : {e}")
 
+        if st.session_state.get("redaction_brut") is not None:
+            with st.expander("Réponse brute du LLM (debug)"):
+                st.json(st.session_state["redaction_brut"])
+
         contexte_redige = st.text_area(
             "Compréhension du besoin (contexte rédigé)",
-            value=contenu.get("contexte_redige", ""),
             height=180,
+            key=cle_contexte,
         )
 
-        demarche_existante = contenu.get("demarche", {})
         demarche_edit = {}
         for phase, label in DEMARCHE_LABELS.items():
             demarche_edit[phase] = st.text_area(
                 f"Démarche — {label}",
-                value=demarche_existante.get(phase, ""),
                 height=100,
-                key=f"demarche_{phase}",
+                key=cles_demarche[phase],
             )
 
         if st.button("Enregistrer le contenu"):
@@ -466,19 +486,27 @@ with tab_contenu:
             for ligne in lignes_contenu:
                 st.markdown(f"**{ligne['prenom']} {ligne['nom']}**")
                 cid = ligne["consultant_id"]
+                cle_synthese = f"synthese_area_{demande_id}_{cid}"
+                st.session_state.setdefault(cle_synthese, ligne["synthese_cv"] or "")
 
                 if st.button(f"Générer la synthèse CV — {ligne['prenom']} {ligne['nom']}", key=f"gen_synthese_{cid}"):
                     consultant = repository.get_consultant(con, cid)
                     cv_complet = json.loads(consultant["cv_complet_json"]) if consultant["cv_complet_json"] else {}
                     try:
-                        resultat = redaction.synthetiser_cv(cv_complet, analyse_json)
-                        st.session_state[f"synthese_texte_{cid}"] = resultat["synthese"]
+                        resultat, brut = redaction.synthetiser_cv(cv_complet, analyse_json, retourner_brut=True)
+                        st.session_state[f"synthese_brut_{cid}"] = brut
+                        st.session_state[cle_synthese] = resultat["synthese"]
                         st.success("Synthèse générée : relisez avant enregistrement.")
+                        if not resultat["synthese"]:
+                            st.warning("Le LLM a renvoyé une synthèse vide — voir la réponse brute ci-dessous.")
                     except Exception as e:
                         st.error(f"Génération impossible : {e}")
 
-                valeur_defaut = st.session_state.get(f"synthese_texte_{cid}", ligne["synthese_cv"] or "")
-                synthese_texte = st.text_area("Synthèse", value=valeur_defaut, height=150, key=f"synthese_area_{cid}")
+                if st.session_state.get(f"synthese_brut_{cid}") is not None:
+                    with st.expander("Réponse brute du LLM (debug)"):
+                        st.json(st.session_state[f"synthese_brut_{cid}"])
+
+                synthese_texte = st.text_area("Synthèse", height=150, key=cle_synthese)
 
                 if st.button("Enregistrer la synthèse", key=f"save_synthese_{cid}"):
                     repository.set_ligne(con, demande_id, cid, synthese_cv=synthese_texte)
@@ -495,14 +523,22 @@ with tab_contenu:
             )
         else:
             st.caption("L'export reprend le contenu **enregistré** (pensez à « Enregistrer le contenu » avant de générer).")
+            st.markdown("**Rédacteur (page de garde)** — laissez vide pour conserver les marqueurs à compléter dans PowerPoint.")
+            rc1, rc2 = st.columns(2)
+            red_nom = rc1.text_input("Nom du rédacteur", key="red_nom")
+            red_fonction = rc2.text_input("Fonction", key="red_fonction")
+            red_email = rc1.text_input("Email", key="red_email")
+            red_tel = rc2.text_input("Téléphone", key="red_tel")
             if st.button("Générer le PowerPoint"):
                 lignes_budget = repository.list_lignes(con, demande_id)
                 nom_fichier = f"{(demande['reference'] or f'demande-{demande_id}').replace(' ', '_')}.pptx"
                 chemin_sortie = config.PROPOSITIONS_DIR / nom_fichier
                 contenu_persiste = json.loads(demande["contenu_genere_json"]) if demande["contenu_genere_json"] else None
+                redacteur = {"nom": red_nom, "fonction": red_fonction, "email": red_email, "telephone": red_tel}
                 try:
                     total = pptx_export.generer_pptx(demande=demande, lignes=lignes_budget,
-                                                     chemin_sortie=chemin_sortie, contenu=contenu_persiste)
+                                                     chemin_sortie=chemin_sortie, contenu=contenu_persiste,
+                                                     redacteur=redacteur)
                     repository.create_proposition(
                         con, demande_id=demande_id, client_id=demande["client_id"],
                         titre=demande["titre"], chemin_pptx=str(chemin_sortie),

@@ -12,17 +12,18 @@ SYSTEM = (
     "clés, en français, orthographiées à l'identique : "
     '{"contexte": str, "objectifs": [str], "enjeux": [str], "livrables": [str], '
     '"competences": [str], "planning": str}. '
-    "contexte : un paragraphe synthétisant la situation et la demande du client. "
-    "objectifs : ce que le client veut obtenir. "
-    "enjeux : les risques et bénéfices en jeu. "
+    "contexte : un paragraphe développé (4 à 6 phrases) synthétisant la situation, "
+    "le marché, la demande du client et l'origine du besoin. "
+    "objectifs : ce que le client veut obtenir (liste concrète, 3 à 6 éléments). "
+    "enjeux : les risques et bénéfices en jeu (3 à 6 éléments). "
     "livrables : les livrables attendus. "
     "competences : les compétences requises pour la mission. "
     "planning : résumé du calendrier/jalons si mentionné, sinon chaîne vide. "
-    "IMPÉRATIF : remplis TOUTES les clés à partir du texte — même si l'appel "
-    "d'offres est succinct, déduis un contexte, des objectifs, des enjeux et "
-    "des compétences plausibles ; ne laisse une clé vide que si l'information "
-    "est réellement absente. N'invente pas de faits (noms, chiffres, dates) "
-    "qui ne seraient pas dans le texte."
+    "IMPÉRATIF : remplis TOUTES les clés à partir du texte de façon étoffée — même "
+    "si l'appel d'offres est succinct, déduis un contexte, des objectifs, des enjeux "
+    "et des compétences plausibles et détaillés ; ne laisse une clé vide que si "
+    "l'information est réellement absente. N'invente pas de faits (noms, chiffres, "
+    "dates) qui ne seraient pas dans le texte."
 )
 
 # Le LLM gratuit renvoie parfois des variantes de clés (anglais, singulier,
@@ -45,12 +46,15 @@ def _premier_present(analyse: dict, cles: tuple):
 
 
 def analyser_demande(texte_brut: str) -> dict:
+    from .redaction import _normaliser_dict  # normalisation partagée (minuscules, sans accents)
+
     brut = llm.complete_json(SYSTEM, texte_brut[:12000])
     # Tolère un éventuel enrobage {"analyse": {...}} renvoyé par certains modèles.
     if isinstance(brut, dict) and len(brut) == 1:
         seule = next(iter(brut.values()))
         if isinstance(seule, dict):
             brut = seule
+    brut = _normaliser_dict(brut)
 
     def _liste(valeur):
         if isinstance(valeur, str):
