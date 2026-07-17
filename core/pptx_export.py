@@ -13,6 +13,7 @@ calculés, jamais de calcul lui-même.
 """
 import copy
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -104,6 +105,44 @@ def _reduire_si_deborde(text_frame) -> None:
         pass
 
 
+def _police_adaptee(nb_caracteres: int, nb_paragraphes: int, forme):
+    """Taille de police (pt) pour que le texte tienne dans la forme, ou None si
+    la taille du template (14 pt) suffit.
+
+    L'auto-ajustement PowerPoint (_reduire_si_deborde) n'est recalculé qu'à
+    l'ouverture du fichier dans PowerPoint et est ignoré par Google Slides : on
+    fixe donc une taille explicite, estimée de façon déterministe (Calibri
+    ≈ 0,5 × corps par caractère, interligne et espacements majorés)."""
+    largeur_in = (forme.width or 0) / 914400
+    hauteur_in = (forme.height or 0) / 914400
+    if not largeur_in or not hauteur_in or not nb_caracteres:
+        return None
+    for pt in (14, 13, 12, 11, 10, 9, 8):
+        caracteres_par_ligne = largeur_in * 144 / pt
+        lignes = nb_caracteres / caracteres_par_ligne + nb_paragraphes
+        hauteur = lignes * pt * 1.5 / 72 + nb_paragraphes * 12 / 72
+        if hauteur <= hauteur_in * 0.95:
+            return None if pt == 14 else Pt(pt)
+    return Pt(8)
+
+
+def _appliquer_police(text_frame, taille) -> None:
+    if taille is None:
+        return
+    for para in text_frame.paragraphs:
+        for run in para.runs:
+            run.font.size = taille
+
+
+def _ajuster_police_zone(forme) -> None:
+    """Fixe une taille de police explicite pour que le contenu de la zone tienne,
+    puis laisse l'auto-ajustement PowerPoint affiner à l'ouverture."""
+    tf = forme.text_frame
+    texte = tf.text
+    _appliquer_police(tf, _police_adaptee(len(texte), max(texte.count("\n") + 1, 1), forme))
+    _reduire_si_deborde(tf)
+
+
 def _reduire_police_cellule(text_frame, longueur: int) -> None:
     """Réduit la police d'une cellule selon la longueur du texte.
 
@@ -177,15 +216,23 @@ def _dupliquer_slide(prs, index_source):
 
 
 def _reordonner(prs, slides_dans_lordre) -> None:
-    """Réécrit l'ordre des slides ; celles absentes de la liste sont retirées du diaporama."""
+    """Réécrit l'ordre des slides ; celles absentes de la liste sont retirées.
+
+    Une slide retirée l'est complètement : son entrée du sldIdLst ET sa relation
+    depuis la présentation. Une relation orpheline vers une slide hors diaporama
+    peut faire passer le fichier pour endommagé aux yeux de PowerPoint."""
     lst = prs.slides._sldIdLst
     elems = {int(s.get("id")): s for s in list(lst)}
     # slide.slide_id se résout via le sldIdLst : on capture les ids AVANT de le vider.
     ids_ordonnes = [s.slide_id for s in slides_dans_lordre]
+    rids_retires = [e.get(qn("r:id")) for sid, e in elems.items() if sid not in ids_ordonnes]
     for s in list(lst):
         lst.remove(s)
     for sid in ids_ordonnes:
         lst.append(elems[sid])
+    for rid in rids_retires:
+        if rid and rid in prs.part.rels:
+            prs.part.rels.pop(rid)
 
 
 # --------------------------------------------------------------------------- #
@@ -245,6 +292,7 @@ def _contexte(prs, contenu: dict | None) -> None:
     zone = _forme(slide, "Espace réservé du contenu 22")
     if zone is not None and zone.has_text_frame:
         _definir_texte(zone.text_frame, contexte)
+        _ajuster_police_zone(zone)
 
 
 def _retirer_frise(slide) -> None:
@@ -345,7 +393,7 @@ def _slide_demarche(prs, contenu: dict | None):
         body.remove(p)
     for label, desc in phases:
         body.append(_para_phase(modele, f"{label} : ", desc))
-    _reduire_si_deborde(zone.text_frame)
+    _ajuster_police_zone(zone)
     return slide
 
 
@@ -372,6 +420,13 @@ def _definir_runs(p_element, valeurs) -> None:
             t.text = valeur
 
 
+def _premieres_phrases(texte: str, nb: int = 2, max_caracteres: int = 340) -> str:
+    """Les premières phrases d'un texte (pour un résumé court et borné)."""
+    phrases = re.split(r"(?<=[.!?])\s+", (texte or "").strip())
+    resume = " ".join(phrases[:nb]).strip()
+    return resume if len(resume) <= max_caracteres else resume[:max_caracteres].rstrip() + "…"
+
+
 def _equipe_projet(slide, lignes: list, *, retirer_pied_demarche: bool = False) -> None:
     """Remplit « L'équipe projet » : un bloc par consultant, bloc superviseur retiré.
 
@@ -393,6 +448,7 @@ def _equipe_projet(slide, lignes: list, *, retirer_pied_demarche: bool = False) 
     i_footer = next((i for i, p in enumerate(paras) if "Démarche opérationnelle" in texte(p)), None)
     modele_id = next((p for p in paras if "Intervenant principal" in texte(p)), None)
     modele_exp = next((p for p in paras if texte(p).startswith("Expertise")), None)
+    modele_va = next((p for p in paras if texte(p).startswith("Valeur ajoutée")), None)
     modele_role = next((p for p in paras if texte(p).startswith("Rôle :") and "[Responsab" in texte(p)), None)
     if i_header is None or i_footer is None or modele_id is None:
         return
@@ -412,14 +468,21 @@ def _equipe_projet(slide, lignes: list, *, retirer_pied_demarche: bool = False) 
         _definir_runs(pid, [f"{nom} ", reste])
         nouveaux.append(pid)
 
-        # Expertise = compétences (court) sur la slide Modalités ; la synthèse
-        # détaillée figure sur la fiche CV, pour ne pas surcharger cette slide.
+        # Expertise = compétences (court) ; Valeur ajoutée = début de la synthèse
+        # ciblée mission (borné à 2 phrases pour rester lisible quel que soit le
+        # nombre de consultants) — la synthèse complète figure sur la fiche CV.
         competences = [c for c in _charger_cv(ligne).get("competences", []) if isinstance(c, str)]
-        expertise = ", ".join(competences) or (_valeur(ligne, "synthese_cv") or "").strip()
+        expertise = ", ".join(competences)
         if expertise and modele_exp is not None:
             pe = copy.deepcopy(modele_exp)
             _definir_runs(pe, [None, expertise])
             nouveaux.append(pe)
+
+        valeur_ajoutee = _premieres_phrases(_valeur(ligne, "synthese_cv") or "")
+        if valeur_ajoutee and modele_va is not None:
+            pv = copy.deepcopy(modele_va)
+            _definir_runs(pv, [None, valeur_ajoutee])
+            nouveaux.append(pv)
 
         if role and modele_role is not None:
             pr = copy.deepcopy(modele_role)
@@ -437,8 +500,10 @@ def _equipe_projet(slide, lignes: list, *, retirer_pied_demarche: bool = False) 
 
     if retirer_pied_demarche and paras[i_footer].getparent() is not None:
         paras[i_footer].getparent().remove(paras[i_footer])
+        # La frise a été retirée : la zone équipe peut occuper le bas de la slide.
+        intro.height = Emu(int(9.1 * 914400))
 
-    _reduire_si_deborde(intro.text_frame)
+    _ajuster_police_zone(intro)
 
 
 def _fiche_cv(slide, ligne) -> None:

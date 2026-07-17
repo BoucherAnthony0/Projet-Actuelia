@@ -140,8 +140,10 @@ def test_generer_pptx_avec_le_vrai_template(tmp_path) -> None:
     )
     assert "Alice DUPONT" in modalites
     assert "Bob MARTIN" in modalites
-    assert "Solvabilité 2" in modalites  # expertise = compétences (court), pas la synthèse
-    assert "Synthèse ciblée mission pour Alice." not in modalites  # la synthèse reste sur la fiche CV
+    assert "Solvabilité 2" in modalites  # expertise = compétences
+    # Valeur ajoutée = début de la synthèse ciblée mission (bornée à 2 phrases).
+    assert "Valeur ajoutée" in modalites
+    assert "Synthèse ciblée mission pour Alice." in modalites
     assert "Superviseur" not in modalites
     assert "[Prénom NOM]" not in modalites
     # La démarche a migré sur sa propre slide : ni le pied ni les phases ne restent ici.
