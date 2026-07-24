@@ -3,7 +3,7 @@ from pathlib import Path
 import streamlit as st
 import config
 from db import init_db, get_connection, repository
-from core import analyse, cv_import, finance, parsing, pptx_export, redaction
+from core import analyse, cv_import, cv_referentiel, finance, parsing, pptx_export, redaction
 
 st.set_page_config(page_title="Actuelia", page_icon="📇", layout="wide")
 
@@ -69,6 +69,29 @@ with tab_accueil:
                     st.success(f"Importé : {f.name} (consultant id {cid})")
                 except Exception as e:
                     st.error(f"{f.name} : {e}")
+
+    st.divider()
+    st.subheader("Synchroniser depuis le référentiel CV")
+    st.caption(
+        "Récupère les Master CV du générateur de CV (profils exhaustifs, à jour) et "
+        "les recopie dans la base locale — les consultants existants sont mis à jour, "
+        "les autres créés. Source : " + cv_referentiel.CV_API_URL
+    )
+    if st.button("🔄 Synchroniser les consultants", key="btn_sync_referentiel"):
+        try:
+            with st.spinner("Synchronisation depuis le référentiel..."):
+                stats = cv_referentiel.synchroniser_vers_sqlite(con)
+            st.success(
+                f"Synchronisation terminée : {stats['crees']} consultant(s) créé(s), "
+                f"{stats['mis_a_jour']} mis à jour."
+            )
+            st.rerun()
+        except Exception as exc:
+            st.error(
+                f"Référentiel injoignable ({cv_referentiel.CV_API_URL}) : {exc}\n\n"
+                "Vérifier que l'API du générateur de CV tourne (backend Node, port 3000) "
+                "et la variable CV_API_URL dans `.env`."
+            )
 
     st.divider()
     st.subheader("Consultants en base")
